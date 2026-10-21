@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" href="logo.png">
+<meta name="description" content="Cadet Squadron 12 hub: Dozen Daily, duty schedules, taskers, paperwork builder and A4/6 tools.">
 <title>CS-12 One Stop Shop</title>
-<meta name="description" content="Cadet Squadron 12 paperwork builder: Tongue and Quill memos, eSSS, Form 99, AF 174, Form 10 and OCONUS packages.">
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
 <style>
 /* Layout: black patch-style masthead with a red/yellow runway stripe, tab rail, one wide working column.
    Palette comes from the CS-12 patch: patch blue, black, white, runway red and yellow, flight-line grey. */
@@ -209,7 +212,6 @@ button.step{cursor:pointer}
 @media (max-width:640px){ .daily-logo{height:70px;top:16px;transform:none;right:12px} .daily-top{margin-right:78px} .daily-name,.daily-tag{margin-right:0} .mast .who{display:none} .week{min-width:900px} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
-<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
 <header class="mast">
@@ -287,8 +289,8 @@ document.addEventListener('focusout',()=>setTimeout(()=>{ if(S.pending){ const a
 
 /* ---------- writes ---------- */
 function dbErr(e){ console.warn(e); toast(e&&e.code==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff for edit access.':e&&e.code==='quota_exceeded'?'The database is full. Delete old records and try again.':'That didn’t save. Check your connection and try again.'); }
-async function upd(path,obj){ if(!S.db) return toast('Sign in to Claude to make changes.'); try{ if(D(path)) await S.db.doc(path).update(obj); else await S.db.doc(path).set(obj); }catch(e){dbErr(e)} }
-async function setDoc(path,obj){ if(!S.db) return toast('Sign in to Claude to make changes.'); try{ await S.db.doc(path).set(obj); return true }catch(e){dbErr(e); return false} }
+async function upd(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ if(D(path)) await S.db.doc(path).update(obj); else await S.db.doc(path).set(obj); }catch(e){dbErr(e)} }
+async function setDoc(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ await S.db.doc(path).set(obj); return true }catch(e){dbErr(e); return false} }
 async function delDoc(path){ try{ await S.db.doc(path).delete(); }catch(e){dbErr(e)} }
 
 /* inline confirm (no confirm() in the viewer) */
@@ -300,7 +302,10 @@ function confirmBtn(label, onYes, cls='btn sm danger'){
 async function copy(text){ try{ await navigator.clipboard.writeText(text); toast('Copied'); }catch(e){ toast('Copy blocked here. Select the text and copy it.'); } }
 
 /* ---------- tabs ---------- */
-const TABS=[['builder','Paperwork Builder'],['links','Docs & Links'],['hub','Squadron Hub ↗']];
+const TABS=[
+  ['home','Dozen Daily'],['me','My Squadron'],['sqstaff','Sq Staff 🔒'],['builder','Paperwork Builder'],
+  ['a46','A4/6 🔒'],['staffs','Staffs'],['duty','Duty'],['roster','Roster'],['life','Squadron Life'],['links','Docs & Links']
+];
 function go(t){ S.tab=t; try{ history.replaceState(null,'','#'+t) }catch(e){} ls('tab',t); render(); window.scrollTo({top:0}); }
 function renderTabs(){
   $('#tabs').replaceChildren(...TABS.map(([k,l])=>h('button',{type:'button','aria-current':S.tab===k?'page':null,onclick:()=>go(k)},l)));
@@ -313,7 +318,7 @@ function render(){
   let body;
   try{ body=(VIEWS[S.tab]||VIEWS.home)(); }catch(e){ console.error(e); body=h('div',{class:'banner bad'},h('b',null,'Something broke on this tab. '),String(e.message||e)); }
   const top=[];
-  if(S.nodb) top.push(h('div',{class:'banner info'},h('b',null,'Sign in to see squadron data. '),'This page keeps its records in a shared database that loads once you’re signed in to Claude.'));
+  if(S.nodb) top.push(h('div',{class:'banner info'},h('b',null,'Sign in to see squadron data. '),'This page keeps its records in a shared database that loads once you’re signed in.'));
   else if(!S.ready) top.push(h('div',{class:'banner info'},'Loading…'));
   m.replaceChildren(...top, body);
   window.scrollTo({top:scroll});
@@ -817,7 +822,7 @@ async function appendPdf(doc,src){ // copy pages AND keep their form fields live
 }
 async function fetchBytes(url){ const r=await fetch(url); if(!r.ok) throw new Error('Couldn’t load '+url); return new Uint8Array(await r.arrayBuffer()); }
 async function savePdf(bytes,filename){
-  if(!S.downloads){ toast('Downloads aren’t available in this view. Open the page in Claude to save PDFs.'); return false; }
+  if(!S.downloads){ toast('Downloads aren’t available in this view. Try another browser.'); return false; }
   try{ await S.downloads.save({filename:filename.replace(/[\\/:*?"<>|]/g,'-'),data:new Blob([bytes],{type:'application/pdf'})}); toast('PDF saved'); return true; }
   catch(e){ if(e&&e.code==='declined') toast('Download cancelled'); else if(e&&e.code==='rate_limited') toast('A save prompt is already open.'); else toast('Couldn’t save the PDF ('+(e&&e.code||'error')+').'); return false; }
 }
@@ -1339,7 +1344,7 @@ async function buildPortfolio(files,o){
   return await doc.save();
 }
 async function saveAny(bytes,filename){
-  if(!S.downloads){ toast('Downloads aren’t available in this view. Open the page in Claude to save files.'); return false; }
+  if(!S.downloads){ toast('Downloads aren’t available in this view. Try another browser.'); return false; }
   try{ await S.downloads.save({filename:filename.replace(/[\\/:*?"<>|]/g,'-'),data:new Blob([bytes])}); toast('Saved'); return true; }
   catch(e){ toast(e&&e.code==='declined'?'Download cancelled':'Couldn’t save the file ('+(e&&e.code||'error')+').'); return false; }
 }
@@ -1498,7 +1503,7 @@ function myDraftsPanel(meCol){
       confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))):h('p',{class:'muted'},'Nothing yet. Documents you download from the Paperwork Builder land here automatically.'));
 }
 VIEWS.me=function(){
-  if(S.nodb||!S.uid) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),emptyState('Sign in to Claude to see your personal page.'));
+  if(S.nodb||!S.uid) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),emptyState('Sign in to see your personal page.'));
   const name=myName(); const st=S.edit.me||(S.edit.me={pick:'',todo:'',due:''});
   if(!name) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),
     h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Who are you?'),h('p',{class:'muted'},'Pick your name once. This page then shows paperwork headed your way, your to-dos, taskers and duty days. Only you can see your to-dos.'),
@@ -1543,15 +1548,754 @@ VIEWS.me=function(){
 };
 </script>
 <script>
-/* ===== Public site mode: paperwork tools only, no squadron data ===== */
-window.PUBLIC=true;
-S.ready=true; S.nodb=false; S.db=null; S.canEdit=false; S.canWrite=false;
-S.docs['config/site']={links:[{"label": "USAFA Phone Number Reference List", "url": "https://www.usafa.af.mil/Portals/21/documents/Home/2018_Phone_List.pdf?ver=2018-06-13-130324-243"}, {"label": "Helping Agencies", "url": "https://www.usafa.edu/helping-agencies/"}, {"label": "CMTS", "url": "https://usafa0.sharepoint.com/CW/CWT/Lists/CMTS_and_CW_Calendar/CW%20Master%20Calendar.aspx"}, {"label": "FalconNet", "url": "https://falconnet.us/"}]};
-S.downloads={save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),5000); return {status:'saved'}; }};
-sendHeadsUp=async()=>{}; saveMyDraft=async()=>{}; sendDiscipline=async()=>{};
-const _renderTabs=renderTabs; renderTabs=function(){ _renderTabs(); $('#who').replaceChildren(h('span',{class:'pill view'},'Public site')); const hb=[...document.querySelectorAll('#tabs button')].find(b=>b.textContent.startsWith('Squadron Hub')); if(hb) hb.onclick=()=>window.open('https://claude.ai/artifact/2PzPZ5Gs4oa3qqXPg75iun','_blank','noopener'); };
-VIEWS.hub=function(){ return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Squadron Hub'),h('p',{class:'muted'},'The Dozen Daily, My Squadron, CQ and SDO schedules, taskers, DIRT and photos live in the CS-12 hub. Sign in to Claude with a free account to open it.'),h('a',{class:'btn pri',href:'https://claude.ai/artifact/2PzPZ5Gs4oa3qqXPg75iun',target:'_blank',rel:'noopener'},'Open the Squadron Hub')); };
-(function(){ const hs=(location.hash||'').slice(1); S.sub=ls('sub')||{}; S.tab=TABS.some(t=>t[0]===hs)?hs:'builder'; if(S.tab==='hub') S.tab='builder'; render(); })();
+/* ================= SQUADRON STAFF (locked) ================= */
+const SQ_ROLES=[['taskers','Taskers','—'],['recall','Recall Roster','—'],['exec','Exec','Squadron Executive'],['shirt','First Sergeant','Squadron First Sergeant'],['cc','Squadron Commander','Squadron Commander'],['cos','Chief of Staff','Squadron Chief of Staff'],['supt','Staff Supt','Squadron Staff Superintendent'],['sel','SEL','Squadron Senior Enlisted Leader']];
+function cmdStaffPerson(name){ if(!name) return null; const r=D('roster/main'); if(!r) return null; const sec=r.sections.find(s=>/Command Staff/.test(s.name)); return sec?sec.people.find(p=>sameName(p.name,name)):null; }
+const daysTo=d=>d?Math.round((new Date(d+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
+const ageDays=iso=>iso?Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/864e5)):0;
+function suspenseChip(d){ const n=daysTo(d); if(n==null) return h('span',{class:'chip Drafted'},'No suspense'); const cls=n<0?'Returned':n<7?'Returned':n<14?'Sent':'Approved'; return h('span',{class:'chip '+cls},n<0?`${-n}d past`:n===0?'Today':`${n}d out`); }
+function signedBy(x,n){ return Object.keys(x.signed||{}).some(s=>sameName(s,n)); }
+function nextSigner(x){ return x.routing.find(n=>!signedBy(x,n)); }
+function weekBucket(d){ const n=daysTo(d); if(n==null) return 'No suspense date'; if(n<0) return 'Past suspense'; if(n<7) return 'This week'; if(n<14) return 'Next week'; return 'Later'; }
+const BUCKETS=['Past suspense','This week','Next week','Later','No suspense date'];
+
+VIEWS.sqstaff=function(){
+  const lockMsg=(t,m)=>h('div',{class:'stack'},head('Squadron Staff','Exec, First Sergeant, Commander, Chief of Staff, Staff Supt and SEL.'),h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},t),h('p',{class:'muted'},m)));
+  if(S.nodb) return lockMsg('Squadron staff only','Sign in to continue.');
+  if(!S.canEdit) return lockMsg('Squadron staff only','This tab is for squadron command staff with Editor access. Ask the Chief of Staff if you need it.');
+  const me=myName(); const person=cmdStaffPerson(me);
+  if(!S.isOwner&&!person) return lockMsg('Squadron staff only',me?`${me} isn’t listed under Squadron Command Staff on the roster.`:'Pick your name on the My Squadron tab first. This tab opens for the people listed under Squadron Command Staff.');
+  const mine=person?(SQ_ROLES.find(r=>new RegExp('^'+r[2]+'$').test((person.pos||'').trim()))||[])[0]:null;
+  const [cur,segEl]=seg('sqrole',SQ_ROLES.map(r=>[r[0],r[1]]),mine||'exec');
+  const body={recall:()=>VIEWS.logistics(),taskers:()=>VIEWS.taskers(),exec:sqExec,shirt:sqShirt,cc:sqCC,cos:sqCoS,supt:sqSupt,sel:sqSel}[cur]();
+  return h('div',{class:'stack'},head('Squadron Staff',`${person?person.rank+' '+person.name+' · ':''}Locked to squadron command staff.`,segEl),body);
+};
+
+/* ---- leadership taskers (CoS -> division chiefs, SEL -> flight commanders, CC -> both) ---- */
+function leaderTargets(kinds){
+  const out=[]; const ppl=allPeople();
+  if(kinds.includes('staff')){ const r=D('roster/main'); const sec=r&&r.sections.find(x=>/Command Staff/.test(x.name)); (sec?sec.people:[]).filter(p=>!/^Squadron Commander$/.test((p.pos||'').trim())).forEach(p=>out.push({key:'stf:'+p.pos,label:(p.pos||'').replace(/^Squadron /,''),name:p.name,rank:p.rank,kind:'staff'})); }
+  if(kinds.includes('div')){ [['A1',/Squadron A1 Division Chief/],['A2',/Squadron A2 Division Chief/],['A3',/Squadron A3 Division Chief/],['A4/6',/Squadron A4\/A6 Division Chief/],['Stan/Eval',/Standardization\/Evaluation Officer/]].forEach(([l,re])=>{ const p=ppl.find(x=>re.test(x.pos||'')); if(p) out.push({key:'div:'+l,label:l==='Stan/Eval'?'Stan/Eval Officer':l+' Division Chief',name:p.name,rank:p.rank,kind:'div'}); }); }
+  if(kinds.includes('flight')){ ['Alpha','Bravo','Charlie'].forEach(f=>{ const p=ppl.find(x=>/^Flight Commander$/.test((x.pos||'').trim())&&(x.section||'').startsWith(f)); if(p) out.push({key:'flt:'+f,label:f+' Flight Commander',name:p.name,rank:p.rank,kind:'flight'}); }); }
+  return out;
+}
+function leaderTaskPanel(kinds,byRole){
+  const targets=leaderTargets(kinds); const f=S.edit['ldr'+byRole]||(S.edit['ldr'+byRole]={title:'',due:'',notes:'',to:[]});
+  const mine=(S.ldr||[]).filter(x=>x.byRole===byRole).sort((a,b)=>(a.status==='Done')-(b.status==='Done')||(a.due||'9').localeCompare(b.due||'9'));
+  const who=kinds.includes('staff')?'squadron staff, division chiefs and flight commanders':kinds.length>1?'division chiefs and flight commanders':kinds[0]==='div'?'division chiefs':'flight commanders';
+  const t=today();
+  return h('div',{class:'panel',style:'border:2px solid var(--sky)'},h('h3',null,`Taskers for ${who}`),
+    h('p',{class:'small muted',style:'margin-top:-4px'},'Each person you pick gets it on their My Squadron page and can mark it done.'),
+    h('div',{class:'fgrid'},
+      h('label',{class:'f wide'},'Tasker',h('input',{type:'text',id:'lt'+byRole,value:f.title,placeholder:'e.g. Turn in flight PFT roster',oninput:e=>f.title=e.target.value})),
+      h('label',{class:'f'},'Due',h('input',{type:'date',id:'ld'+byRole,value:f.due,oninput:e=>f.due=e.target.value})),
+      h('label',{class:'f wide'},'Notes (optional)',h('input',{type:'text',id:'ln'+byRole,value:f.notes,oninput:e=>f.notes=e.target.value})),
+      h('div',{class:'f wide'},'Assign to',...[['staff','Squadron staff'],['div','Division chiefs'],['flight','Flight commanders']].filter(([k])=>kinds.includes(k)).map(([k,l])=>h('div',null,kinds.length>1?h('div',{class:'small muted',style:'font-weight:700;margin-top:4px'},l):null,h('div',{class:'row'},targets.filter(tg=>tg.kind===k).map(tg=>h('label',{class:'ck'},h('input',{type:'checkbox',checked:f.to.includes(tg.key),onchange:e=>{ f.to=e.target.checked?[...f.to,tg.key]:f.to.filter(x=>x!==tg.key); }}),`${tg.label} (${tg.name})`))))),h('div',{class:'row'},
+        h('button',{class:'btn sm',type:'button',onclick:()=>{ f.to=targets.map(x=>x.key); render(); }},'All')))),
+    h('button',{class:'btn pri',style:'margin-top:10px',onclick:async()=>{ if(!f.title.trim()) return toast('Name the tasker.'); if(!f.to.length) return toast('Pick who it’s for.'); const batch=uid();
+      for(const k of f.to){ const tg=targets.find(x=>x.key===k); if(tg) await setDoc('ldrtasks/'+uid(),{title:f.title.trim(),due:f.due||'',notes:f.notes||'',assignee:tg.name,assigneeRole:tg.label,kind:tg.kind,byRole,by:myName()||'',batch,status:'Open',created:new Date().toISOString()}); }
+      toast(`Sent to ${f.to.length}`); S.edit['ldr'+byRole]=null; render(); }},'Send tasker'),
+    h('h4',{style:'margin-top:16px'},'Sent from here'),
+    mine.length?h('ul',{class:'list'},mine.map(x=>h('li',null,h('span',{class:'st '+(x.status==='Done'?'yes':x.due&&x.due<t?'no':'na')},x.status==='Done'?'Done':x.due&&x.due<t?'Late':'Open'),
+      h('div',{class:'grow'},h('b',null,x.title),h('div',{class:'small muted'},[x.assigneeRole+' · '+stripCls(x.assignee),x.due?'due '+fmtShort(x.due):'',x.status==='Done'&&x.doneAt?'done '+fmtShort(x.doneAt.slice(0,10)):''].filter(Boolean).join(' · '))),
+      confirmBtn('×',()=>delDoc('ldrtasks/'+x.id))))):h('p',{class:'muted'},'Nothing sent yet.'));
+}
+
+/* ---- shared: paperwork timeline ---- */
+function paperworkTimeline(items,opts={}){
+  const show=S.sub.sqShow||'active';
+  const list=items.filter(x=>show==='all'||(x.status||'Active')==='Active'&&nextSigner(x)).sort((a,b)=>(a.suspense||'9999').localeCompare(b.suspense||'9999'));
+  const groups={}; list.forEach(x=>{ const b=weekBucket(x.suspense); (groups[b]=groups[b]||[]).push(x); });
+  return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},opts.title||'Paperwork timeline'),h('span',{class:'spacer'}),
+      h('div',{class:'seg'},[['active','Active'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(show===k),onclick:()=>{S.sub.sqShow=k;render()}},l)))),
+    h('p',{class:'small muted'},opts.note||'Everything people sent with a heads-up to their chain, sorted by suspense date.'),
+    list.length?BUCKETS.filter(b=>groups[b]).map(b=>h('div',{class:'stack',style:'gap:8px;margin-top:10px'},h('h4',null,`${b} (${groups[b].length})`),
+      groups[b].map(x=>{ const nx=nextSigner(x); return h('div',{class:'tl'},
+        h('div',{class:'row'},h('span',{class:'chip Sent'},x.kind),h('b',null,x.from),suspenseChip(x.suspense),h('span',{class:'small muted'},`sent ${ageDays(x.created)}d ago`),h('span',{class:'spacer'}),
+          (x.status||'Active')!=='Active'?h('span',{class:'chip '+(x.status==='Returned'?'Returned':'Approved')},x.status):null),
+        h('div',{class:'small muted',style:'margin:2px 0 6px'},[x.subject,x.extra].filter(Boolean).join(' · ')),
+        h('div',{class:'track'},x.routing.map((n,i)=>{ const done=signedBy(x,n); const now=!done&&n===nx; return h('span',{class:'step'+(done?' done':now?' now':'')},h('i',null,done?'✓':String(i+1)),stripCls(n)); })),
+        h('div',{class:'row',style:'margin-top:8px'},
+          nx?h('button',{class:'btn sm',onclick:()=>upd('headsup/'+x.id,{signed:{[nx]:new Date().toISOString()}})},`Mark ${stripCls(nx)} signed`):h('span',{class:'small',style:'color:var(--mint)'},'Fully signed'),
+          (x.status||'Active')==='Active'?[h('button',{class:'btn sm',onclick:()=>upd('headsup/'+x.id,{status:'Returned'})},'Returned for fixes'),h('button',{class:'btn sm',onclick:()=>upd('headsup/'+x.id,{status:'Closed'})},'Close')]:h('button',{class:'btn sm',onclick:()=>upd('headsup/'+x.id,{status:'Active'})},'Reopen'))); }))) : h('p',{class:'muted',style:'margin-top:10px'},'No active paperwork. Items show up here when someone downloads an eSSS or OCONUS package with “heads-up to my chain” checked.'));
+}
+
+/* ---- Exec ---- */
+function sqExec(){
+  const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
+  return h('div',{class:'stack'},
+    paperworkTimeline(S.headsup||[],{title:'Active paperwork timeline'}),
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Weekly schedule for the Dozen Daily'),h('span',{class:'spacer'}),h('span',{class:'chip '+(age==null||age>6?'Returned':'Approved')},age==null?'Not updated on the site yet':age===0?'Updated today':`Updated ${age}d ago`)),
+      h('p',{class:'small muted'},'Update this every week. It’s the schedule everyone sees on the Dozen Daily.'),
+      h('div',{class:'stack'},outlookBlock()))
+  );
+}
+
+/* ---- First Sergeant ---- */
+const DISC_STATUS={'Form 10':['Submitted','Logged','With supervisor','Delivered to cadet','Cadet MFR received','Awarded','Closed'],'AF 174':['Submitted','Reviewed','Closed']};
+function disciplineItems(){ const out=[]; (S.discipline||[]).forEach(d=>Object.entries(d.items||{}).forEach(([id,x])=>out.push({...x,id,owner:d.id}))); return out.sort((a,b)=>(b.created||'').localeCompare(a.created||'')); }
+function sqShirt(){
+  const show=S.sub.shirtShow||'open'; const all=disciplineItems(); const list=all.filter(x=>show==='all'||x.status!=='Closed');
+  const wk=weekStart(today()); const dirt=(S.dirt||[]).filter(x=>(x.date||x.created||'').slice(0,10)>=wk).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+  const setStatus=(x,v)=>S.db.doc('discipline/'+x.owner).update({items:{[x.id]:{status:v,updated:new Date().toISOString()}}}).catch(dbErr);
+  return h('div',{class:'stack'},
+    h('div',{class:'kpis'},kpi('Open Form 10s',String(all.filter(x=>x.kind==='Form 10'&&x.status!=='Closed').length)),kpi('Open 174s',String(all.filter(x=>x.kind==='AF 174'&&x.status!=='Closed').length)),kpi('DIRT this week',String(dirt.length))),
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Form 10 and AF 174 timeline'),h('span',{class:'spacer'}),h('div',{class:'seg'},[['open','Open'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(show===k),onclick:()=>{S.sub.shirtShow=k;render()}},l)))),
+      h('p',{class:'small muted'},'Sent from the Paperwork Builder with “Notify the First Sergeant” checked. Only staff with Editor access can see these. For Form 10s, the cadet’s MFR is due within 3 duty days of receiving it.'),
+      list.length?h('div',{class:'stack',style:'gap:10px'},list.map(x=>{ const steps=DISC_STATUS[x.kind]||DISC_STATUS['AF 174']; const si=steps.indexOf(x.status);
+        return h('div',{class:'tl'},
+          h('div',{class:'row'},h('span',{class:'chip '+(x.kind==='Form 10'?'Returned':'Sent')},x.kind),h('b',null,x.cadet||'(no name)'),x.classYear?h('span',{class:'small muted'},x.classYear):null,h('span',{class:'small muted'},`${x.date?fmtShort(x.date)+' · ':''}from ${x.ro||x.from||'unknown'} · ${ageDays(x.created)}d ago`)),
+          x.summary?h('div',{class:'small',style:'margin:4px 0 6px;overflow-wrap:anywhere'},x.summary):null,
+          h('div',{class:'track'},steps.map((st,i)=>h('button',{type:'button',class:'step'+(i<si?' done':i===si?' now':''),onclick:()=>setStatus(x,st)},h('i',null,i<si?'✓':String(i+1)),st)))); })):h('p',{class:'muted'},'Nothing open.')),
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'DIRT this week'),h('span',{class:'spacer'}),dirt.length?h('button',{class:'btn sm',onclick:()=>copy(dirt.map(x=>`• ${x.who?x.who+': ':''}${x.text}`).join('\n'))},'Copy list'):null),
+      dirt.length?h('ul',{class:'list'},dirt.map(x=>h('li',null,h('span',{class:'chip Sent',style:'flex:none'},x.cat||'Shout-out'),h('div',{class:'grow'},x.who?h('b',null,x.who+': '):null,x.text)))):h('p',{class:'muted'},'No DIRT posted this week yet.'))
+  );
+}
+
+/* ---- coverage gaps (shared by Supt / CC / CoS) ---- */
+function coverageGaps(days=7){
+  const out={sdo:[],cq:[]}; const t=today(); const end=iso(new Date(new Date(t+'T12:00').getTime()+days*864e5));
+  const s=D('sdo/schedule'); if(s){ for(let i=0;i<days;i++){ const d=iso(new Date(new Date(t+'T12:00').getTime()+i*864e5)); if(!s.days[d]&&!(s.notes&&s.notes[d])) out.sdo.push(d); } }
+  const q=D('cq/board'); if(q){ const fill=q.fill||{}; q.weeks.forEach(w=>w.rows.forEach(r=>r.slots.forEach((sl,col)=>{ if(sl.k==='x'||fill[sl.id]) return; const d=cqDateFor(w,col); if(d&&d>=t&&d<end) out.cq.push({date:d,day:w.days[col],time:col<4?r.wd:r.we}); }))); out.cq.sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)); }
+  return out;
+}
+function sqSupt(){
+  const g=coverageGaps(7); const [view,vseg]=seg('suptview',[['sdo','SDO schedule'],['cq','CQ schedule']],'sdo');
+  return h('div',{class:'stack'},
+    h('div',{class:'grid2',style:'align-items:start'},
+      h('div',{class:'panel',style:g.sdo.length?'border:2px solid var(--coral)':''},h('h3',null,`Open SDO days · next 7 days (${g.sdo.length})`),
+        g.sdo.length?h('ul',{class:'list'},g.sdo.map(d=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(d)),h('span',{class:'grow'},new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'long'})),h('span',{class:'chip Returned'},'No SDO')))):h('p',{style:'color:var(--mint)'},'Every day this week has an SDO.')),
+      h('div',{class:'panel',style:g.cq.length?'border:2px solid var(--coral)':''},h('h3',null,`Open CQ shifts · next 7 days (${g.cq.length})`),
+        g.cq.length?h('ul',{class:'list'},g.cq.map(x=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(x.date)),h('span',{class:'grow'},x.day),h('span',{class:'mono small'},x.time)))):h('p',{style:'color:var(--mint)'},'Every CQ shift this week is filled.'))),
+    h('div',{class:'row'},vseg),
+    view==='sdo'?sdoView():cqView()
+  );
+}
+
+/* ---- SEL: taskers ---- */
+function taskerStatus(){
+  const tk=D('taskers/board'); if(!tk) return [];
+  return tk.columns.map(c=>{ const due=tkDue(c); const n=daysTo(due); const missing=[]; let done=0,total=0;
+    tk.groups.forEach(g=>g.people.forEach(p=>{ const v=(tk.status[p.id]||{})[c.id]||''; if(!v) return; total++; if(/^yes/i.test(v)) done++; else missing.push({name:p.name,rank:p.rank,group:g.name}); }));
+    const state=!due?'nodue':missing.length===0?'done':n<0?'overdue':n<=7?'soon':'later';
+    return {c,due,n,missing,done,total,state}; });
+}
+function sqSel(){
+  const ts=taskerStatus(); const order={overdue:0,soon:1,later:2,nodue:3,done:4};
+  ts.sort((a,b)=>order[a.state]-order[b.state]||(a.due||'9').localeCompare(b.due||'9'));
+  const label={overdue:'Missed deadline',soon:'Due within 7 days',later:'Upcoming',nodue:'No due date set',done:'Complete'};
+  const cls={overdue:'Returned',soon:'Sent',later:'Drafted',nodue:'Drafted',done:'Approved'};
+  return h('div',{class:'stack'},
+    leaderTaskPanel(['flight'],'sel'),
+    h('div',{class:'kpis'},kpi('Missed deadline',String(ts.filter(x=>x.state==='overdue').length),'taskers',ts.some(x=>x.state==='overdue')),kpi('Due this week',String(ts.filter(x=>x.state==='soon').length)),kpi('Cadets behind',String(new Set(ts.filter(x=>x.state==='overdue'||x.state==='soon').flatMap(x=>x.missing.map(m=>m.name))).size))),
+    ts.map(x=>h('div',{class:'panel'},
+      h('div',{class:'row'},h('h3',{style:'margin:0'},x.c.label),h('span',{class:'chip '+cls[x.state]},label[x.state]),h('span',{class:'spacer'}),h('span',{class:'small muted'},x.due?`Due ${fmtShort(x.due)}${x.n<0?` · ${-x.n}d ago`:x.n===0?' · today':` · in ${x.n}d`}`:'Set a due date on the Taskers tab'),h('b',{class:'mono'},`${x.done}/${x.total}`)),
+      h('div',{class:'bar'},h('i',{style:`width:${x.total?100*x.done/x.total:0}%;background:${x.state==='overdue'?'var(--coral)':'var(--mint)'}`})),
+      x.missing.length?h('div',{style:'margin-top:10px'},h('h4',null,(x.state==='overdue'?'Missed the deadline':'Not complete')+` (${x.missing.length})`),
+        h('div',{class:'cols4',style:'gap:6px'},Object.entries(x.missing.reduce((a,m)=>{(a[m.group]=a[m.group]||[]).push(m);return a},{})).map(([g,ms])=>h('div',null,h('div',{class:'small muted',style:'font-weight:700'},g),ms.map(m=>h('div',{class:'small'},`${m.rank} ${m.name}`)))))):null)),
+    h('button',{class:'btn',onclick:()=>{S.sub.sqrole='taskers';render()}},'Open squadron taskers')
+  );
+}
+
+/* ---- Squadron Commander ---- */
+function sqCC(){
+  const r=D('roster/main'); const ccName=(allPeople().find(p=>/^Squadron Commander$/.test((p.pos||'').trim()))||{}).name||'';
+  const hs=(S.headsup||[]).filter(x=>(x.status||'Active')==='Active'&&nextSigner(x));
+  const mineNow=hs.filter(x=>sameName(nextSigner(x),ccName)); const g=coverageGaps(7); const ts=taskerStatus(); const disc=disciplineItems().filter(x=>x.status!=='Closed');
+  const wk=weekStart(today()); const dirt=(S.dirt||[]).filter(x=>(x.date||x.created||'').slice(0,10)>=wk);
+  const tot=ts.reduce((a,x)=>a+x.total,0), done=ts.reduce((a,x)=>a+x.done,0);
+  return h('div',{class:'stack'},
+    leaderTaskPanel(['staff','div','flight'],'cc'),
+    h('div',{class:'kpis'},kpi('Waiting on C/Sq CC',String(mineNow.length),null,mineNow.length>0),kpi('Active paperwork',String(hs.length)),kpi('Open Form 10 / 174',String(disc.length)),kpi('Tasker completion',tot?Math.round(100*done/tot)+'%':'—'),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('DIRT this week',String(dirt.length))),
+    paperworkTimeline(mineNow,{title:`Waiting on ${stripCls(ccName)||'the C/Sq CC'}`,note:'Paperwork where the C/Sq CC is the next signer.'}),
+    h('div',{class:'panel'},h('h3',null,'Taskers behind'),ts.filter(x=>x.state==='overdue'||x.state==='soon').length?h('ul',{class:'list'},ts.filter(x=>x.state==='overdue'||x.state==='soon').map(x=>h('li',null,h('span',{class:'grow'},x.c.label),h('span',{class:'small muted'},`${x.missing.length} not done`),h('span',{class:'chip '+(x.state==='overdue'?'Returned':'Sent')},x.state==='overdue'?'Missed':'Due soon')))):h('p',{class:'muted'},'Nothing overdue or due this week.'))
+  );
+}
+
+/* ---- Chief of Staff ---- */
+function sqCoS(){
+  const acts=(S.actions||[]).filter(a=>!a.done); const t=today();
+  const byStaff={}; acts.forEach(a=>{ (byStaff[a.staff]=byStaff[a.staff]||[]).push(a); });
+  const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
+  const hs=(S.headsup||[]).filter(x=>(x.status||'Active')==='Active'&&nextSigner(x)); const g=coverageGaps(7); const ts=taskerStatus();
+  return h('div',{class:'stack'},
+    leaderTaskPanel(['div'],'cos'),
+    h('div',{class:'kpis'},kpi('Open staff action items',String(acts.length)),kpi('Overdue items',String(acts.filter(a=>a.due&&a.due<t).length),null,acts.some(a=>a.due&&a.due<t)),kpi('Active paperwork',String(hs.length)),kpi('Dozen Daily schedule',age==null?'Not updated':age===0?'Today':age+'d old',site&&site.outlook&&site.outlook.updatedBy?'by '+site.outlook.updatedBy:null,age==null||age>6),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('Taskers missed',String(ts.filter(x=>x.state==='overdue').length),null,ts.some(x=>x.state==='overdue'))),
+    h('div',{class:'panel'},h('h3',null,'Staff action items'),
+      Object.keys(byStaff).length?h('div',{class:'cols4'},Object.entries(byStaff).map(([st,list])=>h('div',null,h('h4',null,st),h('ul',{class:'list'},list.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).map(a=>h('li',null,h('div',{class:'grow small'},a.title,h('div',{class:'muted'},[a.owner,a.due?'due '+fmtShort(a.due):''].filter(Boolean).join(' · '))),a.due&&a.due<t?h('span',{class:'chip Returned'},'Overdue'):null)))))):h('p',{class:'muted'},'No open action items on the Staffs tab.')),
+    paperworkTimeline(S.headsup||[],{title:'All active paperwork'})
+  );
+}
 </script>
+<script>
+/* ================= A4/6 (passcode-encrypted) ================= */
+const V={key:null,data:null,err:'',busy:false,lastCt:null};
+const b64=u8=>btoa(String.fromCharCode(...new Uint8Array(u8)));
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function deriveKey(pass,salt){ const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:250000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']); }
+async function vEncrypt(key,obj){ const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(obj))); return {iv:b64(iv),ct:b64(ct)}; }
+async function vDecrypt(key,doc){ const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(doc.iv)},key,unb64(doc.ct)); return JSON.parse(new TextDecoder().decode(pt)); }
+
+/* CS12 finance guidance (from the CUL procedures, Purchase Requests brief, Money brief and O&M guide). Not secret, so it lives in the page. */
+const FIN={
+  cul:{rules:['Cadet food for training, mentorship, team-building and social decorum events. Not for parties.','Food and non-alcoholic drinks for cadets only.','Not covered: non-cadets, room charges, surcharges (Commissary excepted), tax, tips, paper products, alcohol.','Lunch is not authorized during mandatory lunch. Store and direct-pay requests cover breakfast, dinner or weekend events.','CUL funds vs. tailgating kits for football games is already decided. Don’t deviate from it.'],
+    steps:['Fill out the CUL Request Form and get the AOC/AMT’s signature.','Send it to the Group POC at least 15 days before the event. Only the Group POC submits to Mitchell Hall (Ms. Schroeder), who needs 10 workdays (15 if Mitchell Hall pays the vendor directly).','Once Mitchell Hall approves, route an eSSS through the AOC/AMT to CW/CV.','Direct-pay vendors: Mitchell Hall pays with its GPC. Reimburse-only vendors: pay with the squadron bank account (EFT on file with Mitchell Hall, never a personal account).','Scan and send itemized receipts within 1 business day of the event, and sign Section III of the CUL Request Form.']},
+  om:{poc:'MSgt Clapp, CS12 AMT',rules:['Mission-essential items only: training, office and cleaning supplies, facility equipment, whiteboards, printer supplies.','Not for food, parties, morale, entertainment or seasonal decorations.','Never buy it yourself or use a personal card. The government cardholder buys it after approval.'],
+    sources:['Existing CS12/USAFA inventory or excess property','UNICOR','AbilityOne / Envision','DLA wholesale sources','GSA Advantage / AF Advantage','Mandatory contracts on DAF Launchpad'],
+    pkg:['Requirement and mission justification (item, quantity, where it’s used, why, required features, date needed)','Invoice, quote or cart screenshot (vendor, part number, qty, unit price, shipping, total). Don’t place the order.','Market Research Report if no mandatory source can meet the need (compare 2–3 vendors, mark the one you picked)','Section 889 verification, or the blank Form 889 completed by the vendor','Your contact info and the date needed']},
+  gift:{rules:['Superintendent’s morale (gift) funds have blanket approval, so no TMT tasker is needed. Other gift funds need an approved TMT tasker.','Use them for morale, entertainment and food: Front Porch Thursdays, watch parties, SAR games, flags, signs, stickers, patches.','Mandatory sources first: within the organization, AbilityOne, Envision. If none fits, compare 2–3 vendors on an MRR. No MRR is needed for food.','The vendor must be Section 889 compliant.','The Request for Funds is signed by the Squadron Commander or AMT, not cadets. List UPC/SKU numbers, every item and quantity, the purpose and the event date.','After delivery, pick up promptly and sign the receipt right away so it can be uploaded to CitiBank.']},
+  smw:{rules:['AFMAN 34-201: one Commander’s Call per quarter.','$3 per person or $200, whichever is less.','Light refreshments only.','Submit to the Sq/CC 14 days ahead and to FSS no later than 10 days ahead.','Keep all receipts for reimbursement.']},
+  store:{limit:1000,rules:['Unit unofficial activity fund: the bank account limit is $1,000. You can go over temporarily, for no longer than 6 months.','Two fundraisers per year (car washes, bake sales, swag sales). For us, by us.','No advertising off base (online is OK). No soliciting gift funds or off-base fundraising. Can’t compete with AAFES.','Not during duty hours or in uniform.']},
+  s889:{misc:['Amazon.com LLC (shipped AND sold by Amazon)','Home Depot (online & in-store)','Lowe’s (online & in-store)','Michael’s (Chapel Hills West only)','Blackstone','4Imprint','Aviator Gear','Next Day Display','Anley','Lapel Pins Plus'],food:['Cracker Barrel (outside S Gate)','Chick-fil-A (Spectrum Loop)','Little Caesar’s (Hartsel Dr)','O’Malley’s (Hwy 105)','Panda Express (Interquest)','Torchy’s Tacos (Interquest)','Raising Cane’s (N Academy)','Buffalo Wild Wings (N Academy)','Walmart (Razorback, in store only)','King Soopers']}
+};
+function vaultDefaults(){ return {settings:{rates:{breakfast:5,lunch:7,dinner:9},cap:2000,poc:'Jeannie Schroeder',pocEmail:'jeannie.schroeder@us.af.mil',cc:'10FSS.FSR.NAFDisbursement@us.af.mil',mhLead:10,directLead:15,groupDays:15,receiptsDays:1,lastEvent:'2027-05-16',venueAlloc:9000,confirmed:true},cul:[],gift:{ledger:[]},om:{budget:7000,budgetNote:'',items:[]},smw:{events:[]},store:{months:[],costs:[],income:[],note:''},vendors:[],imports:[]}; }
+function vaultNormalize(v){ const d=vaultDefaults(); for(const k in d) if(v[k]==null) v[k]=d[k]; v.settings={...d.settings,...v.settings}; if(v.settings.lead!=null&&v.settings.mhLead==null) v.settings.mhLead=v.settings.lead; return v; }
+async function vaultApplyImport(){ // merge staff-only finance imports staged by Claude, then delete the staging doc
+  const imp=D('staff/a46import'); if(!V.key||!V.data||!imp||!imp.id||(V.data.imports||[]).includes(imp.id)) return;
+  await vaultSave(v=>{
+    if(imp.settings) v.settings={...v.settings,...imp.settings};
+    (imp.cul||[]).forEach(r=>{ const i=v.cul.findIndex(x=>norm(x.event)===norm(r.event)); if(i>=0) v.cul[i]={...v.cul[i],...r,id:v.cul[i].id}; else v.cul.push({...r,id:uid()}); });
+    (imp.gift||[]).forEach(r=>{ if(!v.gift.ledger.some(x=>norm(x.item)===norm(r.item)&&+x.amount===+r.amount)) v.gift.ledger.push({...r,id:uid()}); });
+    if(imp.om) v.om=imp.om; if(imp.smw) v.smw=imp.smw; if(imp.store) v.store=imp.store;
+    (imp.vendors||[]).forEach(r=>{ const i=v.vendors.findIndex(x=>norm(x.name)===norm(r.name)); if(i>=0) v.vendors[i]={...v.vendors[i],...r}; else v.vendors.push(r); });
+    v.imports=[...(v.imports||[]),imp.id];
+  });
+  try{ await S.db.doc('staff/a46import').delete(); }catch(e){}
+  toast('Finance spreadsheet loaded into A4/6');
+}
+async function vaultSync(){
+  const d=D('a46/vault'); if(!V.key||!d||!d.ct) return;
+  if(d.ct!==V.lastCt){ try{ V.data=vaultNormalize(await vDecrypt(V.key,d)); V.lastCt=d.ct; schedule(); }catch(e){ V.key=null; V.data=null; V.err='The passcode changed. Enter the new one.'; schedule(); return; } }
+  if(!vaultSync.busy){ vaultSync.busy=true; try{ await vaultApplyImport(); } finally { vaultSync.busy=false; } }
+}
+async function vaultSave(mut){
+  if(!V.key) return; const d=D('a46/vault');
+  if(d&&d.ct&&d.ct!==V.lastCt){ try{ V.data=vaultNormalize(await vDecrypt(V.key,d)); }catch(e){} }
+  mut(V.data);
+  const enc=await vEncrypt(V.key,V.data);
+  if(await setDoc('a46/vault',{v:1,salt:d.salt,...enc,updated:new Date().toISOString()})){ V.lastCt=enc.ct; render(); }
+}
+const A46_TABS=[['overview','Overview'],['cul','CUL'],['om','O&M'],['gift','SUPT gift funds'],['smw','SM&W'],['store','Squad funds'],['vendors','Vendors'],['settings','Settings']];
+VIEWS.a46=function(){
+  const d=D('a46/vault');
+  if(S.nodb) return emptyState('Sign in to use the A4/6 tools.');
+  if(!S.ready) return h('div');
+  if(!V.key||!V.data) return a46Lock(d);
+  vaultSync();
+  const [cur,segEl]=seg('a46',A46_TABS,'overview');
+  const body={overview:a46Overview,cul:a46Cul,om:a46Om,gift:a46Gift,smw:a46Smw,store:a46Store,vendors:a46Vendors,settings:a46Settings}[cur]||a46Overview;
+  return h('div',{class:'stack'},
+    head('A4/6 Finance','Every CS12 fund in one place. Everything on this tab is encrypted with the A4/6 passcode.',h('button',{class:'btn',onclick:()=>{V.key=null;V.data=null;V.lastCt=null;render()}},'Lock')),
+    h('div',{class:'row'},segEl), body());
+};
+function a46Lock(d){
+  const fresh=!d||!d.ct; const st=S.edit.lock||(S.edit.lock={p:'',p2:''});
+  const go2=async()=>{
+    if(V.busy) return; V.err='';
+    if(fresh){ if(!S.canEdit) { V.err='Only staff with edit access can set up the A4/6 passcode.'; return render(); } if(st.p.length<8){V.err='Use at least 8 characters.';return render();} if(st.p!==st.p2){V.err='The passcodes don’t match.';return render();} }
+    V.busy=true; render();
+    try{
+      if(fresh){ const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKey(st.p,salt); const data=vaultDefaults(); const enc=await vEncrypt(key,data); if(await setDoc('a46/vault',{v:1,salt:b64(salt),...enc,updated:new Date().toISOString()})){ V.key=key; V.data=data; V.lastCt=enc.ct; } }
+      else { const key=await deriveKey(st.p,unb64(d.salt)); V.data=vaultNormalize(await vDecrypt(key,d)); V.key=key; V.lastCt=d.ct; }
+      S.edit.lock=null;
+    }catch(e){ V.err='That passcode didn’t work.'; }
+    V.busy=false; render();
+  };
+  return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},fresh?'Set the A4/6 passcode':'A4/6 is locked'),
+    h('p',{class:'muted'},fresh?'Pick a passcode to share with your A4/6 staff. It encrypts every fund’s balances, requests and vendors. Nobody can read them without it, and it can’t be recovered if lost.':'Enter the A4/6 passcode to open CS12’s fund balances, requests and vendors.'),
+    h('form',{class:'stack',style:'gap:10px;text-align:left',onsubmit:e=>{e.preventDefault();go2()}},
+      h('label',{class:'f'},'Passcode',h('input',{type:'password',id:'vp',autocomplete:fresh?'new-password':'current-password',value:st.p,oninput:e=>st.p=e.target.value})),
+      fresh?h('label',{class:'f'},'Confirm passcode',h('input',{type:'password',id:'vp2',autocomplete:'new-password',value:st.p2,oninput:e=>st.p2=e.target.value})):null,
+      V.err?h('div',{class:'banner bad small',style:'margin:0'},V.err):null,
+      h('button',{class:'btn pri',type:'submit',disabled:V.busy},V.busy?'Working…':fresh?'Set passcode':'Unlock')));
+}
+const rulesBox=(title,list)=>h('details',{class:'box'},h('summary',null,title),h('ul',{class:'small',style:'margin:8px 0 0;padding-left:18px'},list.map(r=>h('li',null,r))));
+const stepsBox=(title,list)=>h('details',{class:'box'},h('summary',null,title),h('ol',{class:'small',style:'margin:8px 0 0;padding-left:20px'},list.map(r=>h('li',null,r))));
+const kpi=(l,v,sub,warn)=>h('div',{class:'kpi'},h('div',{class:'l'},l),h('div',{class:'v',style:warn?'color:var(--coral)':''},v),sub?h('div',{class:'small muted'},sub):null);
+const tbd=v=>v===''||v==null;
+
+/* ---- money math ---- */
+const CUL_STATUS=['Draft','Planned','Submitted','Approved','Spent','Receipts turned in','Cancelled'];
+function culItemsTotal(r){ return (r.items||[]).reduce((a,i)=>a+(+i.qty||0)*(+i.unit||0),0); }
+function culCalc(r,s){ const rate=+s.rates[r.meal]||0; const max=rate*(+r.cadets||0); const req=culItemsTotal(r)||(+r.est||0); const authorized=r.cadets?Math.min(max,req||max):req; return {rate,max,req,authorized}; }
+const culCounts=r=>!['Draft','Cancelled'].includes(r.status)&&r.pay!=='venue';
+function culUsed(){ const s=V.data.settings; return V.data.cul.filter(culCounts).reduce((a,r)=>a+culCalc(r,s).authorized,0); }
+function giftTotals(){ const L=V.data.gift.ledger; const dep=L.filter(x=>x.kind==='deposit').reduce((a,x)=>a+(+x.amount||0),0); const spent=L.filter(x=>x.kind!=='deposit'&&['Swiped','Posted'].includes(x.status)).reduce((a,x)=>a+(+x.amount||0),0); const pending=L.filter(x=>x.kind!=='deposit'&&['Requested','Approved'].includes(x.status)).reduce((a,x)=>a+(+x.amount||0),0); return {dep,spent,pending,bal:dep-spent,after:dep-spent-pending}; }
+const OM_COMMITTED=['In work','Ordered','Purchased','Received'];
+function omTotals(){ const o=V.data.om; const t={estC:0,highC:0,estP:0,highP:0}; o.items.forEach(i=>{ const e=(+i.qty||0)*(+i.avg||0), hi=(+i.qty||0)*(+i.high||i.avg||0); if(i.status==='Cancelled') return; if(OM_COMMITTED.includes(i.status)){t.estC+=e;t.highC+=hi;} else {t.estP+=e;t.highP+=hi;} }); t.remEst=o.budget-t.estC-t.estP; t.remHigh=o.budget-t.highC-t.highP; return t; }
+function storeTotals(){ const st=V.data.store; const costs=st.costs.reduce((a,x)=>a+(+x.amount||0),0); const inc=st.income.reduce((a,x)=>a+(+x.amount||0),0); const last=[...st.months].reverse().find(m=>!tbd(m.balance)); return {costs,inc,net:inc-costs,last}; }
+
+/* ---- Overview ---- */
+function a46Overview(){
+  const s=V.data.settings; const used=culUsed(); const g=giftTotals(); const o=omTotals(); const st=storeTotals();
+  const planned=V.data.cul.filter(r=>r.status==='Planned'||r.status==='Draft');
+  const card=(title,tab,kids)=>h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},title),h('span',{class:'spacer'}),h('button',{class:'btn sm',onclick:()=>{S.sub.a46=tab;ls('sub',S.sub);render()}},'Open')),h('div',{style:'margin-top:10px'},kids));
+  return h('div',{class:'stack'},
+    h('div',{class:'grid2'},
+      card('CUL funds','cul',[h('div',{class:'kpis'},kpi('Remaining',money(s.cap-used),`of ${money(s.cap)}, use by ${fmtShort(s.lastEvent)}`,s.cap-used<100),kpi('Committed',money(used))),
+        h('div',{class:'bar'},h('i',{style:`width:${Math.min(100,100*used/s.cap)}%;background:${used>s.cap*.85?'var(--coral)':'var(--mint)'}`})),
+        planned.length&&s.cap-used<200?h('p',{class:'small',style:'color:var(--coral);margin:8px 0 0'},`${planned.length} planned event${planned.length>1?'s':''} (${planned.map(p=>p.event).join(', ')}) with only ${money(s.cap-used)} left.`):null]),
+      card('O&M (fiscal year)','om',h('div',{class:'kpis'},kpi('Remaining (est.)',money(o.remEst),`${money(o.remHigh)} at high-end prices`),kpi('Committed',money(o.estC)),kpi('Proposed',money(o.estP)))),
+      card('SUPT gift funds','gift',h('div',{class:'kpis'},kpi('Available',money(g.bal)),kpi('Pending',money(g.pending)),kpi('After pending',money(g.after),null,g.after<0))),
+      card('SM&W','smw',[h('div',{class:'kpis'},kpi('Events logged',String(V.data.smw.events.length)),kpi('Per Commander’s Call','$3/person','max $200 per quarter'))]),
+      card('Squad funds / store','store',[h('div',{class:'kpis'},kpi('Account balance',st.last?money(st.last.balance):'—',st.last?st.last.m:'',st.last&&+st.last.balance>FIN.store.limit),kpi('Profit − costs',money(st.net),null,st.net<0)),
+        st.last&&+st.last.balance>FIN.store.limit?h('p',{class:'small',style:'color:var(--coral);margin:8px 0 0'},`Over the $1,000 account limit. You can stay over for no longer than 6 months.`):null])
+    )
+  );
+}
+
+/* ---- CUL ---- */
+const MEALS=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner']];
+const PAYS=[['direct','Mitchell Hall pays the vendor (direct pay)'],['reimburse','Squadron account, reimbursed after'],['venue','Falcon Club / Golf Course / Bowling Center']];
+function culBlank(){ return {id:null,event:'',date:'',time:'',meal:'dinner',cadets:'',est:'',items:[{qty:'',desc:'',unit:''}],pay:'direct',venue:'',vendor:'',poc:'',pocGrade:'',pocPhone:'',pocEmail:'',purpose:'',status:'Draft'}; }
+function a46Cul(){
+  const s=V.data.settings; const list=V.data.cul.slice().sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999'));
+  const used=culUsed();
+  const f=S.edit.cul||(S.edit.cul=culBlank()); if(!f.items) f.items=[{qty:'',desc:'',unit:''}];
+  const c=culCalc(f,s);
+  const wd=f.date?workdaysBetween(today(),f.date):null; const cal=f.date?Math.round((new Date(f.date+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
+  const mhLead=f.pay==='direct'?s.directLead:s.mhLead;
+  const vendor=V.data.vendors.find(v=>norm(v.name)===norm(f.vendor));
+  const issues=[];
+  if(f.date&&cal<s.groupDays) issues.push(`Only ${cal} days out. The Group POC needs requests ${s.groupDays} days before the event.`);
+  else if(f.date&&wd<mhLead) issues.push(`Only ${wd} workdays out. Mitchell Hall needs ${mhLead} workdays${f.pay==='direct'?' to pay a vendor directly':''}.`);
+  if(f.date&&s.lastEvent&&f.date>s.lastEvent) issues.push(`CUL funds can’t be used after ${fmtDate(s.lastEvent)}.`);
+  if(f.meal==='lunch') issues.push('Lunch isn’t authorized during mandatory lunch, and store or direct-pay requests only cover breakfast, dinner or weekend events.');
+  if(f.pay==='venue'&&f.meal==='breakfast') issues.push('Falcon Club, Golf Course and Bowling Center events can only be dinners or weekend events.');
+  if(vendor&&vendor.type==='Reimburse only'&&f.pay==='direct') issues.push(`${vendor.name} is reimburse-only. Mitchell Hall can’t pay them directly.`);
+  if(/party/i.test(f.event+' '+f.purpose)) issues.push('CUL funds can’t be used for a party. Frame the event around training, mentorship or social decorum, or use gift funds.');
+  if(c.req&&f.cadets&&c.req>c.max) issues.push(`The menu is ${money(c.req-c.max)} over the per-cadet limit. Only ${money(c.max)} is covered.`);
+  const prev=f.id?V.data.cul.find(x=>x.id===f.id):null;
+  if(f.pay!=='venue'&&used-(prev&&culCounts(prev)?culCalc(prev,s).authorized:0)+c.authorized>s.cap) issues.push(`This would go over the ${money(s.cap)} squadron CUL allocation (${money(s.cap-used)} left).`);
+  const saveF=async(st)=>{ if(!f.event) return toast('Name the event first.'); const rec={...f,status:st||f.status,id:f.id||uid(),updated:today()}; await vaultSave(v=>{ const i=v.cul.findIndex(x=>x.id===rec.id); if(i>=0) v.cul[i]=rec; else v.cul.push(rec); }); S.edit.cul={...rec}; toast('Saved'); };
+  return h('div',{class:'stack'},
+    h('div',{class:'kpis'},kpi('Remaining',money(s.cap-used),null,s.cap-used<100),kpi('Committed',money(used),`of ${money(s.cap)}`),kpi('Per cadet',`$${s.rates.breakfast} · $${s.rates.lunch} · $${s.rates.dinner}`,'breakfast · lunch · dinner'),kpi('Use by',fmtShort(s.lastEvent))),
+    h('div',{class:'grid2'},rulesBox('What CUL funds cover',FIN.cul.rules),stepsBox('How to request CUL funds',FIN.cul.steps)),
+    h('div',{class:'panel'},h('h3',null,'CUL funds report'),
+      list.length?h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,['Event','Date','Cost','Remaining after','Status',''].map(x=>h('th',null,x)))),
+        h('tbody',null,(()=>{ let rem=s.cap; return list.map(r=>{ const amt=culCalc(r,s).authorized; const counts=culCounts(r)&&amt>0; if(counts) rem-=amt; return h('tr',null,
+          h('td',{style:'font-weight:600'},r.event,r.pay==='venue'?h('div',{class:'small muted'},'Venue allocation (not from squadron funds)'):null),
+          h('td',{class:'mono small'},r.date?fmtShort(r.date):'TBD'),h('td',{class:'num'},amt?money(amt):'TBD'),h('td',{class:'num'},counts?money(rem):'—'),
+          h('td',null,h('select',{id:'cs'+r.id,style:'width:auto',onchange:e=>vaultSave(v=>{const x=v.cul.find(y=>y.id===r.id); if(x) x.status=e.target.value;})},CUL_STATUS.map(st=>h('option',{value:st,selected:r.status===st},st)))),
+          h('td',null,h('div',{class:'row'},h('button',{class:'btn sm',onclick:()=>{S.edit.cul=JSON.parse(JSON.stringify(r));render();setTimeout(()=>{const el=$('#culform');el&&el.scrollIntoView({behavior:'smooth'})},0)}},'Open'),confirmBtn('×',()=>vaultSave(v=>{v.cul=v.cul.filter(y=>y.id!==r.id)})))));}); })()),
+        h('tfoot',null,h('tr',null,h('td',{style:'font-weight:700'},'Total committed'),h('td'),h('td',{class:'num',style:'font-weight:700'},money(used)),h('td',{class:'num',style:'font-weight:700'},money(s.cap-used)),h('td'),h('td'))))):h('p',{class:'muted'},'No CUL events yet.')),
+    h('div',{class:'panel',id:'culform'},h('div',{class:'row'},h('h3',{style:'margin:0'},f.id?'Edit: '+f.event:'New CUL request'),h('span',{class:'spacer'}),f.id?h('button',{class:'btn sm',onclick:()=>{S.edit.cul=null;render()}},'Start a new one'):null),
+      h('p',{class:'small muted'},'Builds the CUL Funding Request (Sections I–III) as a PDF with signature boxes.'),
+      h('div',{class:'fgrid'},
+        fld(f,'event','Description of event',{wide:true,ph:'Charlie Flight etiquette dinner',id:'ce',live:true}),
+        fld(f,'date','Event date',{type:'date',id:'cd',live:true}),fld(f,'time','Time',{id:'ct',ph:'1830'}),fld(f,'venue','Location',{id:'cv'}),
+        fld(f,'meal','Meal',{type:'select',options:MEALS,id:'cm'}),fld(f,'cadets','Number of cadets served',{type:'number',id:'cc',live:true}),
+        fld(f,'pay','How it’s paid',{type:'select',options:PAYS,id:'cp'}),
+        h('label',{class:'f'},'Vendor',h('input',{type:'text',id:'cvn',list:'vlist',value:f.vendor,oninput:e=>f.vendor=e.target.value,onchange:()=>render()}),h('datalist',{id:'vlist'},V.data.vendors.map(v=>h('option',{value:v.name},v.type))),vendor?h('span',{class:'h'},vendor.type+(vendor.s889?' · 889 compliant':'')):null),
+        fld(f,'poc','POC name',{id:'cpo',list:'bnames'}),fld(f,'pocGrade','POC grade',{id:'cpg',ph:'C2C'}),fld(f,'pocPhone','POC phone',{id:'cpp'}),fld(f,'pocEmail','POC email',{id:'cpe'}),
+        fld(f,'purpose','Training / mentorship purpose',{type:'textarea',rows:2,wide:true,id:'cpu',live:true})),
+      nameDatalist('bnames'),
+      h('h4',{style:'margin:14px 0 6px'},'Menu items requested'),
+      h('div',{class:'tw'},h('table',{class:'t routing'},h('thead',null,h('tr',null,h('th',null,'Qty'),h('th',null,'Item'),h('th',null,'Unit price'),h('th',null,'Total'),h('th'))),
+        h('tbody',null,f.items.map((it,i)=>h('tr',null,
+          h('td',null,h('input',{type:'number',id:'ciq'+i,value:it.qty,style:'width:70px',oninput:e=>{it.qty=e.target.value;schedule()}})),
+          h('td',null,h('input',{type:'text',id:'cid'+i,value:it.desc,style:'min-width:200px',oninput:e=>it.desc=e.target.value})),
+          h('td',null,h('input',{type:'number',id:'ciu'+i,value:it.unit,step:'0.01',style:'width:100px',oninput:e=>{it.unit=e.target.value;schedule()}})),
+          h('td',{class:'num'},money((+it.qty||0)*(+it.unit||0))),
+          h('td',null,f.items.length>1?h('button',{class:'btn sm danger',onclick:()=>{f.items.splice(i,1);render()}},'×'):null)))))),
+      h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn sm',onclick:()=>{f.items.push({qty:'',desc:'',unit:''});render()}},'+ Item'),h('span',{class:'spacer'}),h('span',{class:'small muted'},'No menu yet? Enter an estimate:'),h('input',{type:'number',id:'cx',value:f.est,style:'width:110px',placeholder:'$',oninput:e=>{f.est=e.target.value;schedule()}})),
+      h('div',{class:'panel',style:'background:var(--bg);margin-top:12px'},
+        h('div',{class:'row'},f.cadets?h('span',null,`${f.cadets} cadets × $${c.rate} = `,h('b',null,money(c.max)),' max'):h('span',{class:'muted'},'Add the number of cadets to check the per-cadet limit.'),h('span',{class:'spacer'}),h('span',null,'Amount: ',h('b',null,money(c.authorized)))),
+        issues.length?h('ul',{class:'small',style:'margin:8px 0 0;padding-left:18px;color:var(--coral)'},issues.map(i=>h('li',null,i))):h('div',{class:'small',style:'color:var(--mint);margin-top:6px'},'Within the CS12 rules.')),
+      h('div',{class:'row',style:'margin-top:12px'},
+        fld(f,'status','Status',{type:'select',options:CUL_STATUS,id:'cst'}),h('span',{class:'spacer'}),
+        h('button',{class:'btn',onclick:()=>saveF()},'Save'),
+        h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildCulPdf(f,s); await savePdf(await d.save(),`CUL Request - ${f.event||'Event'} - ${f.date?fmtShort(f.date):'TBD'}.pdf`); await saveF(f.status==='Draft'||f.status==='Planned'?'Submitted':f.status);}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download CUL Request PDF')))
+  );
+}
+async function buildCulPdf(f,s){
+  const doc=await PDFLib.PDFDocument.create(); const F=await pdfFonts(doc); const page=doc.addPage([PW,PH]); const K=PDFLib.rgb(0,0,0);
+  const L=40,R=572; let y=40;
+  const T=(t,x,yy,sz=9,font=F.h)=>page.drawText(clean(t),{x,y:PH-yy,size:sz,font});
+  const box=(x,yy,w,hh)=>page.drawRectangle({x,y:PH-yy-hh,width:w,height:hh,borderColor:K,borderWidth:0.7});
+  const cell=(x,yy,w,hh,label,val)=>{ box(x,yy,w,hh); T(label,x+3,yy+8,6.5,F.h); tf(doc,page,F.h,'CUL_'+label,x+2,yy+10,w-4,hh-11,val,{multi:hh>30,size:9}); };
+  T('CUL FUNDING REQUEST',PW/2-F.hb.widthOfTextAtSize('CUL FUNDING REQUEST',13)/2,y+10,13,F.hb); y+=18;
+  const sub=`Submit request by email at least ${s.mhLead} workdays prior to date of event to: ${s.pocEmail}`; T(sub,PW/2-F.h.widthOfTextAtSize(sub,8)/2,y+8,8); y+=16;
+  box(L,y,R-L,14); T('SECTION I - EVENT INFORMATION (to be completed by requesting organization)',L+4,y+10,8,F.hb); y+=14;
+  const half=(R-L)/2;
+  cell(L,y,half,28,'Event Date',f.date?fmtDate(f.date):''); cell(L+half,y,half,28,'Cadet Squadron # or Group Name','Cadet Squadron 12 (CS-12), Group 2'); y+=28;
+  cell(L,y,R-L,34,'Description of Event',[f.event,f.purpose].filter(Boolean).join(' — ')); y+=34;
+  cell(L,y,half,28,'Location/time',[f.venue,f.time].filter(Boolean).join(' · ')); cell(L+half,y,half,28,'Number of Cadets Served',String(f.cadets||'')); y+=28;
+  // menu table
+  const cw=[60,300,86,86]; const xs=[L,L+cw[0],L+cw[0]+cw[1],L+cw[0]+cw[1]+cw[2]];
+  ['Quantity','Menu Items Requested','Unit Price','Total Price'].forEach((t,i)=>{ box(xs[i],y,cw[i],14); T(t,xs[i]+3,y+10,7.5,F.hb); }); y+=14;
+  const items=(f.items||[]).filter(i=>i.desc||i.qty||i.unit); const rows=Math.max(5,items.length);
+  for(let i=0;i<rows;i++){ const it=items[i]||{}; const tot=(+it.qty||0)*(+it.unit||0);
+    [it.qty||'',it.desc||'',it.unit?money(it.unit):'',tot?money(tot):''].forEach((t,j)=>{ box(xs[j],y,cw[j],14); tf(doc,page,F.h,`CUL_Menu_${i+1}_${['Qty','Item','Unit','Total'][j]}`,xs[j]+1,y+1,cw[j]-2,12,String(t),{size:8.5}); }); y+=14; }
+  const total=culItemsTotal(f)||(+f.est||0);
+  box(xs[2],y,cw[2],14); T('TOTAL',xs[2]+3,y+10,8,F.hb); box(xs[3],y,cw[3],14); tf(doc,page,F.hb,'CUL_Menu_Total',xs[3]+1,y+1,cw[3]-2,12,money(total),{size:8.5}); y+=18;
+  T(`Per-cadet limit: ${f.cadets||0} cadets × $${(+s.rates[f.meal]||0).toFixed(2)} (${f.meal}) = ${money(culCalc(f,s).max)}   ·   Payment: ${(PAYS.find(p=>p[0]===f.pay)||[])[1]||''}${f.vendor?'   ·   Vendor: '+f.vendor:''}`,L,y+6,7.5,F.hi); y+=14;
+  const third=(R-L)/3;
+  cell(L,y,third*1.4,28,'Point of Contact  Name/Grade',[f.pocGrade,f.poc].filter(Boolean).join(' ')); cell(L+third*1.4,y,third*0.8,28,'Phone',f.pocPhone); cell(L+third*2.2,y,third*0.8,28,'Email Address',f.pocEmail); y+=34;
+  box(L,y,R-L,14); T('SECTION II - APPROVAL (FSS USE ONLY)',L+4,y+10,8,F.hb); y+=14;
+  cell(L,y,half,26,'Amount Authorized',''); cell(L+half,y,half,26,'Name/Grade',''); y+=26;
+  box(L,y,R-L,26); T('Signature',L+3,y+8,6.5); addSig(doc,page,'CUL_FSS_Approval',L+60,y+3,R-L-66,21); y+=32;
+  box(L,y,R-L,14); T('SECTION III - POST EVENT',L+4,y+10,8,F.hb); y+=14;
+  T(`Scan and submit copies of receipts to the email address above within ${s.receiptsDays} business day of event.`,L,y+10,8); y+=16;
+  T('Receiver Statement: I acknowledge receipt of all goods as identified on attached receipts.',L,y+10,8); y+=14;
+  cell(L,y,half,30,'Name and Grade of Receiver',''); box(L+half,y,half,30); T('Signature',L+half+3,y+8,6.5); addSig(doc,page,'CUL_Receiver',L+half+4,y+11,half-8,17); y+=36;
+  T('AOC/Requester CERTIFICATION STATEMENT: I certify that reimbursement requested is for purpose stated above.',L,y+10,8); y+=14;
+  cell(L,y,half,30,'Name and Grade of AOC/Requestor',''); box(L+half,y,half,30); T('Signature',L+half+3,y+8,6.5); addSig(doc,page,'CUL_AOC',L+half+4,y+11,half-8,17); y+=40;
+  T('Route: AOC/AMT signature → Group POC (15 days out) → Mitchell Hall → eSSS through AOC/AMT to CW/CV.',L,y+8,7.5,F.hi);
+  return doc;
+}
+
+/* ---- O&M ---- */
+const OM_STATUS=['Proposed','In work','Ordered','Purchased','Received','Cancelled'];
+function a46Om(){
+  const o=V.data.om; const t=omTotals();
+  const nf=S.edit.om||(S.edit.om={item:'',qty:'1',avg:'',high:'',status:'Proposed',why:''});
+  const upItem=(id,patch)=>vaultSave(v=>{ const x=v.om.items.find(i=>i.id===id); if(x) Object.assign(x,patch); });
+  const req=S.edit.omReq||(S.edit.omReq={});
+  return h('div',{class:'stack'},
+    h('div',{class:'kpis'},kpi('O&M budget',money(o.budget),o.budgetNote||'per fiscal year'),kpi('Committed',money(t.estC),t.highC!==t.estC?`${money(t.highC)} high-end`:null),kpi('Proposed',money(t.estP),t.highP!==t.estP?`${money(t.highP)} high-end`:null),kpi('Remaining',money(t.remEst),`${money(t.remHigh)} at high-end prices`,t.remHigh<0)),
+    h('div',{class:'grid2'},rulesBox('What O&M covers',[...FIN.om.rules,'Squadron POC: '+FIN.om.poc+'.']),stepsBox('What goes in the purchase package',FIN.om.pkg)),
+    rulesBox('Mandatory sources, in order (check before Amazon, Home Depot or Walmart)',FIN.om.sources),
+    h('div',{class:'panel'},h('h3',null,'CS-12 O&M purchase plan'),
+      o.items.length?h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,['Item','Qty','Avg unit','High-end unit','Est. total','High-end total','Status','Why',''].map(x=>h('th',null,x)))),
+        h('tbody',null,o.items.map(i=>h('tr',null,
+          h('td',{style:'font-weight:600;min-width:180px'},i.item),
+          h('td',null,h('input',{type:'number',id:'oq'+i.id,value:i.qty,style:'width:60px',onchange:e=>upItem(i.id,{qty:+e.target.value})})),
+          h('td',null,h('input',{type:'number',id:'oa'+i.id,value:i.avg,style:'width:80px',onchange:e=>upItem(i.id,{avg:+e.target.value})})),
+          h('td',null,h('input',{type:'number',id:'oh'+i.id,value:i.high,style:'width:80px',onchange:e=>upItem(i.id,{high:+e.target.value})})),
+          h('td',{class:'num'},money((+i.qty||0)*(+i.avg||0))),h('td',{class:'num'},money((+i.qty||0)*(+i.high||i.avg||0))),
+          h('td',null,h('select',{id:'os'+i.id,style:'width:auto',onchange:e=>upItem(i.id,{status:e.target.value})},OM_STATUS.map(s=>h('option',{value:s,selected:i.status===s},s)))),
+          h('td',{class:'small',style:'min-width:220px'},i.why),
+          h('td',null,h('div',{class:'row'},h('button',{class:'btn sm',title:'Requirement sheet PDF',onclick:()=>{S.edit.omReq={id:i.id,item:i.item,qty:i.qty,why:i.why,where:'',specs:'',needed:'',requester:'',contact:''};render();setTimeout(()=>{const el=$('#omreq');el&&el.scrollIntoView({behavior:'smooth'})},0)}},'Requirement'),confirmBtn('×',()=>vaultSave(v=>{v.om.items=v.om.items.filter(x=>x.id!==i.id)}))))))))):h('p',{class:'muted'},'No O&M items yet.'),
+      h('details',{class:'box',style:'margin-top:10px'},h('summary',null,'Add an item'),h('div',{class:'fgrid',style:'margin-top:10px'},
+        fld(nf,'item','Item',{wide:true,id:'oni'}),fld(nf,'qty','Qty',{type:'number',id:'onq'}),fld(nf,'avg','Avg unit price',{type:'number',id:'ona'}),fld(nf,'high','High-end unit price',{type:'number',id:'onh'}),fld(nf,'status','Status',{type:'select',options:OM_STATUS,id:'ons'}),fld(nf,'why','Why it’s mission essential',{type:'textarea',rows:2,wide:true,id:'onw'}),
+        h('div',{class:'wide'},h('button',{class:'btn pri',onclick:async()=>{ if(!nf.item.trim()) return toast('Name the item.'); await vaultSave(v=>{v.om.items.push({...nf,id:uid(),qty:+nf.qty||1,avg:+nf.avg||0,high:+nf.high||+nf.avg||0})}); S.edit.om=null; }},'Add item')))),
+      h('div',{class:'row',style:'margin-top:10px'},h('label',{class:'f',style:'flex-direction:row;align-items:center;gap:8px'},'Budget ($)',h('input',{type:'number',id:'omb',value:o.budget,style:'width:110px',onchange:e=>vaultSave(v=>{v.om.budget=+e.target.value})})),h('input',{type:'text',id:'ombn',value:o.budgetNote,placeholder:'Note (e.g. assumed total)',style:'max-width:280px',onchange:e=>vaultSave(v=>{v.om.budgetNote=e.target.value})}))),
+    req.id?h('div',{class:'panel',id:'omreq'},h('h3',null,'Requirement and justification: '+req.item),h('p',{class:'small muted'},'The first page of the O&M package (step 2 of the O&M guide). Attach the quote or cart, the MRR if needed, and 889 support, then send it all to '+FIN.om.poc+'.'),
+      h('div',{class:'fgrid'},fld(req,'item','Item',{id:'rqi',wide:true}),fld(req,'qty','Quantity',{id:'rqq'}),fld(req,'where','Where it will be used',{id:'rqw'}),fld(req,'needed','Date needed',{type:'date',id:'rqn'}),fld(req,'why','Mission or operational need',{type:'textarea',rows:3,wide:true,id:'rqy'}),fld(req,'specs','Required features / minimum specifications',{type:'textarea',rows:3,wide:true,id:'rqs'}),fld(req,'requester','Requester',{id:'rqr',list:'bnames'}),fld(req,'contact','Requester phone / email',{id:'rqc'})),
+      nameDatalist('bnames'),
+      h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn',onclick:()=>{S.edit.omReq={};render()}},'Close'),h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildOmReqPdf(req); await savePdf(await d.save(),`O&M Requirement - ${req.item}.pdf`);}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download requirement PDF'))):null
+  );
+}
+async function buildOmReqPdf(r){
+  const doc=await PDFLib.PDFDocument.create(); const F=await pdfFonts(doc); const page=doc.addPage([PW,PH]);
+  let y=60; const L=54,R=558; const T=(t,x,sz=10,font=F.h)=>page.drawText(clean(t),{x,y:PH-y,size:sz,font});
+  T('O&M REQUIREMENT AND MISSION JUSTIFICATION',L,14,F.hb); y+=16; T(`Cadet Squadron 12 · Squadron POC: ${FIN.om.poc} · Prepared ${fmtDate(today())}`,L,9); y+=12; page.drawLine({start:{x:L,y:PH-y},end:{x:R,y:PH-y},thickness:1.2}); y+=22;
+  const row=(k,v)=>{ T(k.toUpperCase(),L,8,F.hb); const n=Math.max(1,wrapText(v||' ',F.h,10.5,R-L-166).length)+1; tf(doc,page,F.h,'OM_'+k,L+158,y-9,R-L-158,n*13+3,v,{multi:true,size:10.5}); y+=n*13+10; };
+  row('Item',r.item); row('Quantity',String(r.qty||'')); row('Where it will be used',r.where); row('Mission / operational need',r.why); row('Required features / specs',r.specs); row('Date needed',r.needed?fmtDate(r.needed):''); row('Requester',[r.requester,r.contact].filter(Boolean).join(' · '));
+  y+=6; T('PACKAGE CHECKLIST',L,8,F.hb); y+=14;
+  ['Requirement and mission justification (this page)','Invoice, quote or cart screenshot (vendor, part #, qty, unit price, shipping, total)','Market Research Report (only if no mandatory source can meet the need)','Section 889 verification or vendor-completed Form 889','Requester contact information and required date'].forEach(t=>{ page.drawRectangle({x:L,y:PH-y-1,width:9,height:9,borderWidth:0.7,borderColor:PDFLib.rgb(0,0,0)}); T(t,L+16,10); y+=15; });
+  y+=8; wrapText('Do not purchase, promise an order to the vendor, or change the approved vendor or product. The government cardholder completes the purchase after approval.',F.hi,9,R-L).forEach(ln=>{T(ln,L,9,F.hi);y+=11;});
+  return doc;
+}
+
+/* ---- SUPT gift funds ---- */
+const GF_STATUS=['Requested','Approved','Swiped','Posted'];
+function a46Gift(){
+  const L=V.data.gift.ledger; const g=giftTotals();
+  const f=S.edit.gf||(S.edit.gf={kind:'purchase',date:today(),eventDate:'',purpose:'',items:[{desc:'',sku:'',qty:'1',unit:''}],shipping:'',vendor:'',requestor:'',coord:'',status:'Requested',mrr:'mandatory'});
+  if(!f.items) f.items=[{desc:'',sku:'',qty:'1',unit:''}];
+  const itemsTotal=f.items.reduce((a,i)=>a+(+i.qty||0)*(+i.unit||0),0)+(+f.shipping||0);
+  const vendor=V.data.vendors.find(v=>norm(v.name)===norm(f.vendor));
+  return h('div',{class:'stack'},
+    h('div',{class:'kpis'},kpi('Available balance',money(g.bal)),kpi('Pending requests',money(g.pending)),kpi('Remaining after pending',money(g.after),null,g.after<0)),
+    rulesBox('How SUPT gift funds work',FIN.gift.rules),
+    h('div',{class:'grid2'},
+      h('div',{class:'panel'},h('h3',null,f.kind==='deposit'?'Record the balance or a deposit':'Request for Funds (gift funds)'),
+        h('div',{class:'seg',style:'margin-bottom:10px'},[['purchase','Purchase request'],['deposit','Balance / deposit']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(f.kind===k),onclick:()=>{f.kind=k;render()}},l))),
+        f.kind==='deposit'? h('div',{class:'fgrid'},fld(f,'date','Date',{type:'date',id:'gd'}),fld(f,'amount','Amount ($)',{type:'number',id:'ga'}),fld(f,'purpose','Note',{wide:true,id:'gp'})) :
+        [h('div',{class:'fgrid'},
+          fld(f,'requestor','Requestor',{id:'gr',list:'bnames'}),
+          h('label',{class:'f'},'Vendor',h('input',{type:'text',id:'gv',list:'vlist2',value:f.vendor,oninput:e=>f.vendor=e.target.value,onchange:()=>render()}),vendor?h('span',{class:'h'},vendor.s889?'Section 889 compliant':'Check Section 889 compliance'):f.vendor?h('span',{class:'h',style:'color:var(--coral)'},'Not on the 889 list. Verify compliance or send them Form 889.'):null),
+          fld(f,'purpose','Purpose',{wide:true,ph:'Front Porch Thursday',id:'gp'}),fld(f,'eventDate','Event date',{type:'date',id:'ged'}),fld(f,'date','Request date',{type:'date',id:'gd'}),
+          fld(f,'mrr','Market research',{type:'select',options:[['mandatory','Bought from a mandatory source (no MRR)'],['food','Food: no MRR required'],['mrr','MRR attached (2–3 vendors compared)']],id:'gm'}),
+          fld(f,'coord','Required coordination prior to purchase',{id:'gco',ph:'n/a'})),
+          h('h4',{style:'margin:12px 0 6px'},'Items'),
+          h('div',{class:'tw'},h('table',{class:'t routing'},h('thead',null,h('tr',null,['#','Description','UPC/SKU','Qty','Cost each','Total',''].map(x=>h('th',null,x)))),
+            h('tbody',null,f.items.map((it,i)=>h('tr',null,h('td',{class:'mono'},i+1),
+              h('td',null,h('input',{type:'text',id:'gid'+i,value:it.desc,style:'min-width:170px',oninput:e=>it.desc=e.target.value})),
+              h('td',null,h('input',{type:'text',id:'gis'+i,value:it.sku,style:'width:110px',oninput:e=>it.sku=e.target.value})),
+              h('td',null,h('input',{type:'number',id:'giq'+i,value:it.qty,style:'width:60px',oninput:e=>{it.qty=e.target.value;schedule()}})),
+              h('td',null,h('input',{type:'number',id:'giu'+i,value:it.unit,step:'0.01',style:'width:90px',oninput:e=>{it.unit=e.target.value;schedule()}})),
+              h('td',{class:'num'},money((+it.qty||0)*(+it.unit||0))),
+              h('td',null,f.items.length>1?h('button',{class:'btn sm danger',onclick:()=>{f.items.splice(i,1);render()}},'×'):null)))))),
+          h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn sm',onclick:()=>{f.items.push({desc:'',sku:'',qty:'1',unit:''});render()}},'+ Item'),h('span',{class:'spacer'}),h('label',{class:'f',style:'flex-direction:row;align-items:center;gap:6px'},'Shipping/freight',h('input',{type:'number',id:'gsh',value:f.shipping,style:'width:90px',oninput:e=>{f.shipping=e.target.value;schedule()}}))),
+          h('div',{class:'row',style:'margin-top:8px'},h('span',{class:'spacer'}),h('b',null,'Total requested: '+money(itemsTotal)),g.after-itemsTotal<0?h('span',{class:'small',style:'color:var(--coral)'},' · more than what’s left after pending'):null)],
+        h('datalist',{id:'vlist2'},V.data.vendors.map(v=>h('option',{value:v.name}))),nameDatalist('bnames'),
+        h('div',{class:'row',style:'margin-top:12px'},
+          h('button',{class:f.kind==='deposit'?'btn pri':'btn',onclick:async()=>{ const amount=f.kind==='deposit'?+f.amount:itemsTotal; if(!amount) return toast('Enter an amount.'); const rec={...f,amount,item:f.kind==='deposit'?(f.purpose||'Deposit'):(f.purpose||f.items.map(i=>i.desc).filter(Boolean).join(', ')),id:f.id||uid(),status:f.kind==='deposit'?'Posted':f.status}; await vaultSave(v=>{const i=v.gift.ledger.findIndex(x=>x.id===rec.id); if(i>=0) v.gift.ledger[i]=rec; else v.gift.ledger.unshift(rec);}); S.edit.gf=null; toast('Saved to the ledger'); }},f.kind==='deposit'?'Add to ledger':'Save to ledger'),
+          f.kind!=='deposit'?h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildGiftPdf(f); await savePdf(await d.save(),`Request for Funds - ${f.purpose||'Gift Funds'}.pdf`);}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download Request for Funds PDF'):null)),
+      h('div',{class:'panel'},h('h3',null,'Ledger'),
+        L.length?h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,['Date','Item','Amount','Status',''].map(x=>h('th',null,x)))),h('tbody',null,L.map(x=>h('tr',null,
+          h('td',{class:'mono small'},fmtShort(x.date)),h('td',null,x.item,x.vendor?h('div',{class:'small muted'},x.vendor):null),
+          h('td',{class:'num',style:x.kind==='deposit'?'color:var(--mint)':''},(x.kind==='deposit'?'+':'−')+money(x.amount)),
+          h('td',null,x.kind==='deposit'?h('span',{class:'chip Approved'},'Balance'):h('select',{id:'gs'+x.id,style:'width:auto',onchange:e=>vaultSave(v=>{const y=v.gift.ledger.find(z=>z.id===x.id); if(y) y.status=e.target.value;})},GF_STATUS.map(st=>h('option',{value:st,selected:x.status===st},st)))),
+          h('td',null,h('div',{class:'row'},x.kind!=='deposit'?h('button',{class:'btn sm',onclick:()=>{S.edit.gf=JSON.parse(JSON.stringify(x));if(!S.edit.gf.items)S.edit.gf.items=[{desc:x.item,sku:'',qty:'1',unit:String(x.amount)}];render()}},'Open'):null,confirmBtn('×',()=>vaultSave(v=>{v.gift.ledger=v.gift.ledger.filter(z=>z.id!==x.id)}))))))))):h('p',{class:'muted'},'Record the available balance, then log requests as they move Requested → Approved → Swiped → Posted.')))
+  );
+}
+async function buildGiftPdf(f){
+  const doc=await PDFLib.PDFDocument.create(); const F=await pdfFonts(doc); const page=doc.addPage([PW,PH]); const K=PDFLib.rgb(0,0,0);
+  const L=40,R=572; let y=44;
+  const T=(t,x,yy,sz=9,font=F.h)=>page.drawText(clean(t),{x,y:PH-yy,size:sz,font});
+  const box=(x,yy,w,hh)=>page.drawRectangle({x,y:PH-yy-hh,width:w,height:hh,borderColor:K,borderWidth:0.7});
+  const cell=(x,yy,w,hh,label,val)=>{ box(x,yy,w,hh); T(label,x+3,yy+8,6.5); tf(doc,page,F.h,'RFF_'+label,x+2,yy+10,w-4,hh-11,val,{size:9.5}); };
+  T('REQUEST FOR FUNDS',PW/2-F.hb.widthOfTextAtSize('REQUEST FOR FUNDS',14)/2,y+10,14,F.hb); y+=22;
+  const third=(R-L)/3;
+  cell(L,y,third,26,'Requestor',f.requestor); cell(L+third,y,third,26,'Vendor',f.vendor); cell(L+2*third,y,third,26,'Funds','Gift Funds (SUPT morale)'); y+=26;
+  const cw=[40,232,90,50,60,60]; const xs=[]; cw.reduce((x,w,i)=>{xs[i]=x;return x+w},L);
+  ['Item #','Description','UPC/SKU','Quantity','Cost Each','Total'].forEach((t,i)=>{ box(xs[i],y,cw[i],14); T(t,xs[i]+3,y+10,7.5,F.hb); }); y+=14;
+  const items=f.items.filter(i=>i.desc||i.unit); const rows=Math.max(8,items.length);
+  for(let i=0;i<rows;i++){ const it=items[i]; const tot=it?(+it.qty||0)*(+it.unit||0):0;
+    [it?String(i+1):'',it?it.desc:'',it?it.sku:'',it?it.qty:'',it&&it.unit?money(it.unit):'',tot?money(tot):''].forEach((t,j)=>{ box(xs[j],y,cw[j],14); tf(doc,page,F.h,`RFF_Item_${i+1}_${['No','Description','SKU','Qty','Each','Total'][j]}`,xs[j]+1,y+1,cw[j]-2,12,String(t||''),{size:8.5}); }); y+=14; }
+  const sub=f.items.reduce((a,i)=>a+(+i.qty||0)*(+i.unit||0),0);
+  box(xs[4],y,cw[4],14); T('Shipping/Freight',xs[4]+2,y+10,6.5); box(xs[5],y,cw[5],14); tf(doc,page,F.h,'RFF_Shipping',xs[5]+1,y+1,cw[5]-2,12,f.shipping?money(f.shipping):'',{size:8.5}); y+=14;
+  box(L,y,xs[4]-L,30); T('Purpose:',L+3,y+10,7.5,F.hb); tf(doc,page,F.h,'RFF_Purpose',L+40,y+2,xs[4]-L-44,26,[f.purpose,f.eventDate?'Event date: '+fmtDate(f.eventDate):''].filter(Boolean).join(' — '),{multi:true,size:9});
+  box(xs[4],y,cw[4],30); T('Total Requested',xs[4]+2,y+10,6.5); T('Purchase Amount',xs[4]+2,y+18,6.5); box(xs[5],y,cw[5],30); tf(doc,page,F.hb,'RFF_Total',xs[5]+1,y+8,cw[5]-2,14,money(sub+(+f.shipping||0)),{size:9}); y+=36;
+  T('Market research: '+({mandatory:'Mandatory source used (within the organization / AbilityOne / Envision); no MRR required',food:'Food purchase; no MRR required',mrr:'MRR attached; 2–3 vendors compared'}[f.mrr]||''),L,y+8,8,F.hi); y+=12;
+  T('Vendor Section 889 compliance must be verified before purchase.',L,y+8,8,F.hi); y+=18;
+  cell(L,y,R-L,26,'Required Coordination prior to purchase',f.coord||'n/a'); y+=34;
+  const sig=(n,label,name,extra)=>{ box(L,y,(R-L)*0.75,30); T(label,L+3,y+8,6.5); if(extra) T(extra,L+3,y+22,9); else addSig(doc,page,name,L+4,y+11,(R-L)*0.75-8,17); box(L+(R-L)*0.75,y,(R-L)*0.25,30); T('Date',L+(R-L)*0.75+3,y+8,6.5); y+=36; };
+  sig(1,'1 - Requestor Signature','GF_Requestor'); sig(2,'2 - Cardholder Signature','GF_Cardholder'); sig(3,'3 - Approving Official Signature','GF_Approver'); sig(4,"4 - Group Commander's Signature",null,'n/a');
+  T('Must be signed by the Squadron Commander or AMT; cadets do not sign for approval.',L,y+6,7.5,F.hi);
+  return doc;
+}
+
+/* ---- SM&W ---- */
+function a46Smw(){
+  const ev=V.data.smw.events; const f=S.edit.smw||(S.edit.smw={date:'',desc:'',attendees:'',amount:'',status:'Planned',notes:''});
+  const cap=n=>Math.min(200,3*(+n||0));
+  return h('div',{class:'stack'},
+    rulesBox('SM&W rules (quarterly Commander’s Call)',FIN.smw.rules),
+    h('div',{class:'grid2'},
+      h('div',{class:'panel'},h('h3',null,'Commander’s Call events'),
+        ev.length?h('ul',{class:'list'},ev.map(e=>h('li',null,h('div',{class:'grow'},h('b',null,e.desc||'Commander’s Call'),h('div',{class:'small muted'},[e.date?fmtShort(e.date):'TBD',e.attendees?e.attendees+' attendees':'',e.amount?money(e.amount):'',e.notes].filter(Boolean).join(' · ')),+e.amount>cap(e.attendees)&&e.attendees?h('div',{class:'small',style:'color:var(--coral)'},`Over the ${money(cap(e.attendees))} limit for ${e.attendees} people`):null),
+          h('select',{id:'ss'+e.id,style:'width:auto',onchange:x=>vaultSave(v=>{const y=v.smw.events.find(z=>z.id===e.id); if(y) y.status=x.target.value;})},['Planned','Submitted to Sq/CC','Submitted to FSS','Approved','Reimbursed','Cancelled'].map(s=>h('option',{value:s,selected:e.status===s},s))),
+          confirmBtn('×',()=>vaultSave(v=>{v.smw.events=v.smw.events.filter(z=>z.id!==e.id)}))))):h('p',{class:'muted'},V.data.smw.note||'No current data or planned events.')),
+      h('div',{class:'panel'},h('h3',null,'Plan a Commander’s Call'),h('div',{class:'fgrid'},
+        fld(f,'desc','Description',{wide:true,id:'sd',ph:'Q2 Commander’s Call'}),fld(f,'date','Date',{type:'date',id:'sdt',live:true}),fld(f,'attendees','Attendees',{type:'number',id:'sa',live:true}),fld(f,'amount','Estimated cost ($)',{type:'number',id:'sam'}),fld(f,'notes','Notes',{wide:true,id:'sn'})),
+        h('p',{class:'small muted'},f.attendees?`Limit: ${money(cap(f.attendees))} (${f.attendees} × $3, max $200).`:'Limit is $3 per person or $200, whichever is less.',f.date?` Submit to the Sq/CC by ${fmtShort(iso(new Date(new Date(f.date+'T12:00').getTime()-14*864e5)))} and to FSS by ${fmtShort(iso(new Date(new Date(f.date+'T12:00').getTime()-10*864e5)))}.`:''),
+        h('button',{class:'btn pri',onclick:async()=>{ await vaultSave(v=>{v.smw.events.push({...f,id:uid()})}); S.edit.smw=null; }},'Add event')))
+  );
+}
+
+/* ---- Squad funds / store ---- */
+function a46Store(){
+  const st=V.data.store; const t=storeTotals();
+  const upd2=fn=>vaultSave(v=>fn(v.store));
+  const lineList=(key,title)=>h('div',{class:'panel'},h('h3',null,title),
+    h('ul',{class:'list'},st[key].map((x,i)=>h('li',null,h('input',{type:'text',id:key+'l'+i,value:x.label,style:'flex:1',onchange:e=>upd2(s=>{s[key][i].label=e.target.value})}),h('input',{type:'number',id:key+'a'+i,value:x.amount,placeholder:'TBD',step:'0.01',style:'width:110px',onchange:e=>upd2(s=>{s[key][i].amount=e.target.value===''?'':+e.target.value})}),confirmBtn('×',()=>upd2(s=>{s[key].splice(i,1)}))))),
+    h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'btn sm',onclick:()=>upd2(s=>{s[key].push({label:'New line',amount:''})})},'+ Line'),h('span',{class:'spacer'}),h('b',null,'Total: '+money(key==='costs'?t.costs:t.inc))));
+  return h('div',{class:'stack'},
+    h('div',{class:'kpis'},kpi('Account balance',t.last?money(t.last.balance):'—',t.last?t.last.m+' EOM':'',t.last&&+t.last.balance>FIN.store.limit),kpi('Costs',money(t.costs)),kpi('Profit',money(t.inc)),kpi('Profit − costs',money(t.net),st.note||null,t.net<0)),
+    t.last&&+t.last.balance>FIN.store.limit?h('div',{class:'banner warn'},h('b',null,'Over the $1,000 limit. '),'The unit activity fund account can go over $1,000 only temporarily, for no longer than 6 months.'):null,
+    rulesBox('Unit unofficial activity fund rules',FIN.store.rules),
+    h('div',{class:'panel'},h('h3',null,'Monthly balances (entered at end of month)'),h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Month'),h('th',null,'Account balance'),h('th',null,'EOM statement file'))),
+      h('tbody',null,st.months.map((m,i)=>h('tr',null,h('td',{style:'font-weight:600'},m.m),
+        h('td',null,h('input',{type:'number',id:'smb'+i,value:m.balance,placeholder:'—',step:'0.01',style:'width:130px',onchange:e=>upd2(s=>{s.months[i].balance=e.target.value===''?'':+e.target.value})})),
+        h('td',null,h('input',{type:'text',id:'sms'+i,value:m.statement,placeholder:'e.g. VenmoStatement_Oct_2026.csv',onchange:e=>upd2(s=>{s.months[i].statement=e.target.value})})))))))),
+    h('div',{class:'grid2'},lineList('costs','Costs'),lineList('income','Profit'))
+  );
+}
+
+/* ---- Vendors ---- */
+function a46Vendors(){
+  const vs=V.data.vendors.slice().sort((a,b)=>a.name.localeCompare(b.name)); const f=S.edit.vend||(S.edit.vend={name:'',type:'Direct pay',phone:'',notes:'',s889:false});
+  return h('div',{class:'stack'},
+    h('div',{class:'grid2'},
+      h('div',{class:'panel'},h('h3',null,'CUL vendors'),h('p',{class:'small muted'},'Direct pay: Mitchell Hall pays over the phone. Reimburse only: the squadron pays and is reimbursed after the event.'),
+        vs.length?h('ul',{class:'list'},vs.map(v=>h('li',null,h('div',{class:'grow'},h('b',null,v.name),' ',h('span',{class:'chip '+(v.type==='Direct pay'?'Approved':'Sent')},v.type),v.s889?h('span',{class:'chip Drafted',style:'margin-left:4px'},'889'):null,v.phone||v.notes?h('div',{class:'small muted'},[v.phone,v.notes].filter(Boolean).join(' · ')):null),confirmBtn('×',()=>vaultSave(d=>{d.vendors=d.vendors.filter(x=>x.name!==v.name)}))))):h('p',{class:'muted'},'No vendors yet.'),
+        h('details',{class:'box',style:'margin-top:10px'},h('summary',null,'Add a vendor'),h('div',{class:'fgrid',style:'margin-top:10px'},fld(f,'name','Name',{id:'vn'}),fld(f,'type','Payment',{type:'select',options:['Direct pay','Reimburse only'],id:'vt'}),fld(f,'phone','Phone',{id:'vph'}),fld(f,'notes','Notes',{id:'vno'}),
+          h('label',{class:'ck'},h('input',{type:'checkbox',checked:f.s889,onchange:e=>f.s889=e.target.checked}),'Section 889 compliant'),
+          h('div',{class:'wide'},h('button',{class:'btn pri',onclick:async()=>{ if(!f.name.trim()) return toast('Name the vendor.'); await vaultSave(d=>{d.vendors.push({...f})}); S.edit.vend=null; }},'Add vendor'))))),
+      h('div',{class:'panel'},h('h3',null,'Section 889 approved vendors'),h('p',{class:'small muted'},'Already verified. For anyone else, check the GSA representations tool or have the vendor complete Form 889.'),
+        h('h4',null,'Miscellaneous'),h('ul',{class:'small',style:'margin:0 0 10px;padding-left:18px'},FIN.s889.misc.map(x=>h('li',null,x))),
+        h('h4',null,'Food'),h('ul',{class:'small',style:'margin:0;padding-left:18px'},FIN.s889.food.map(x=>h('li',null,x)))))
+  );
+}
+
+/* ---- Settings ---- */
+function a46Settings(){
+  const s=S.edit.vset||(S.edit.vset=JSON.parse(JSON.stringify(V.data.settings)));
+  const pc=S.edit.pc||(S.edit.pc={p:'',p2:''});
+  const num=(obj,k,l)=>h('label',{class:'f'},l,h('input',{type:'number',id:'vs'+k,value:obj[k],oninput:e=>obj[k]=+e.target.value}));
+  return h('div',{class:'grid2'},
+    h('div',{class:'panel'},h('h3',null,'CUL rules'),
+      h('div',{class:'fgrid'},num(s.rates,'breakfast','Breakfast ($/cadet)'),num(s.rates,'lunch','Lunch ($/cadet)'),num(s.rates,'dinner','Dinner ($/cadet)'),num(s,'cap','Squadron allocation ($)'),num(s,'groupDays','Group POC deadline (days before)'),num(s,'mhLead','Mitchell Hall lead (workdays)'),num(s,'directLead','Direct-pay lead (workdays)'),num(s,'receiptsDays','Receipts due (business days)'),
+        h('label',{class:'f'},'Use funds by',h('input',{type:'date',id:'vsle',value:s.lastEvent,oninput:e=>s.lastEvent=e.target.value})),
+        h('label',{class:'f'},'Mitchell Hall POC',h('input',{type:'text',id:'vspoc',value:s.poc,oninput:e=>s.poc=e.target.value})),h('label',{class:'f'},'POC email',h('input',{type:'email',id:'vspe',value:s.pocEmail,oninput:e=>s.pocEmail=e.target.value})),
+        h('label',{class:'f wide'},'NAF Disbursement (EFT / reimbursements)',h('input',{type:'email',id:'vscc',value:s.cc,oninput:e=>s.cc=e.target.value}))),
+      h('button',{class:'btn pri',style:'margin-top:10px',onclick:async()=>{ await vaultSave(v=>{v.settings=JSON.parse(JSON.stringify(s))}); S.edit.vset=null; toast('Settings saved'); }},'Save settings')),
+    h('div',{class:'panel'},h('h3',null,'Change passcode'),h('p',{class:'small muted'},'Re-encrypts everything with the new passcode. Tell your A4/6 staff the new one.'),
+      h('div',{class:'fgrid'},h('label',{class:'f'},'New passcode',h('input',{type:'password',id:'pcn',autocomplete:'new-password',value:pc.p,oninput:e=>pc.p=e.target.value})),h('label',{class:'f'},'Confirm',h('input',{type:'password',id:'pcn2',autocomplete:'new-password',value:pc.p2,oninput:e=>pc.p2=e.target.value}))),
+      h('button',{class:'btn',style:'margin-top:10px',onclick:async()=>{ if(pc.p.length<8) return toast('Use at least 8 characters.'); if(pc.p!==pc.p2) return toast('The passcodes don’t match.'); const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKey(pc.p,salt); const enc=await vEncrypt(key,V.data); if(await setDoc('a46/vault',{v:1,salt:b64(salt),...enc,updated:new Date().toISOString()})){ V.key=key; V.lastCt=enc.ct; S.edit.pc=null; toast('Passcode changed'); render(); } }},'Change passcode'))
+  );
+}
+</script>
+<script>
+const PUBLIC_SITE={links:[{"label": "USAFA Phone Number Reference List", "url": "https://www.usafa.af.mil/Portals/21/documents/Home/2018_Phone_List.pdf?ver=2018-06-13-130324-243"}, {"label": "Helping Agencies", "url": "https://www.usafa.edu/helping-agencies/"}, {"label": "CMTS", "url": "https://usafa0.sharepoint.com/CW/CWT/Lists/CMTS_and_CW_Calendar/CW%20Master%20Calendar.aspx"}, {"label": "FalconNet", "url": "https://falconnet.us/"}]};
+/* ================= FIREBASE BACKEND =================
+   Swaps Claude's storage for Firebase (Auth + Firestore) behind the same small API the app already uses,
+   so every tab keeps working unchanged. Each record is stored as one JSON string ("j") because some
+   grids hold arrays inside arrays, which Firestore can't store natively. */
+const FB={ state:'loading', user:null, member:null, fs:null, auth:null };
+const PUB_TABS=[['builder','Paperwork Builder'],['links','Docs & Links']];
+const OWNER=(window.CS12_OWNER||'').toLowerCase();
+
+function fbConfigured(){ const c=window.FIREBASE_CONFIG; return !!(c&&c.apiKey&&!/PASTE/.test(c.apiKey)&&window.firebase); }
+const fbEnc=obj=>({j:JSON.stringify(obj), by:FB.user.uid, at:firebase.firestore.FieldValue.serverTimestamp()});
+const fbDec=d=>{ if(!d) return null; if(typeof d.j==='string'){ try{ return JSON.parse(d.j); }catch(e){ return null; } } const {by,at,...rest}=d; return rest; };
+function fbMerge(base,patch){
+  const out=(base&&typeof base==='object'&&!Array.isArray(base))?{...base}:{};
+  for(const k in patch){ const v=patch[k];
+    if(v===null||v===undefined) delete out[k];
+    else if(typeof v==='object'&&!Array.isArray(v)&&!(v instanceof Date)) out[k]=fbMerge(out[k],v);
+    else out[k]=v; }
+  return out;
+}
+function fbErr(e){ const c=e&&e.code||''; return Object.assign(new Error(e&&e.message||'error'),{code:c==='permission-denied'?'invalid_argument':c}); }
+
+function fbDb(){
+  const fs=FB.fs;
+  const docApi=path=>{ const ref=fs.doc(path); return {
+    onSnapshot(cb,err){ return ref.onSnapshot(s=>cb({exists:s.exists,data:()=>fbDec(s.data())}), e=>{ if(e&&e.code==='permission-denied') cb({exists:false,data:()=>null}); else err&&err(e); }); },
+    async get(){ const s=await ref.get(); return {exists:s.exists,data:()=>fbDec(s.data())}; },
+    async set(obj){ try{ await ref.set(fbEnc(obj)); }catch(e){ throw fbErr(e); } },
+    async update(obj){ try{ await fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbEnc(fbMerge(s.exists?fbDec(s.data()):{},obj))); }); }catch(e){ throw fbErr(e); } },
+    async delete(){ try{ await ref.delete(); }catch(e){ throw fbErr(e); } } }; };
+  const colApi=path=>({ onSnapshot(cb,err){ return fs.collection(path).onSnapshot(q=>cb({docs:q.docs.map(d=>({id:d.id,data:()=>fbDec(d.data())}))}), e=>{ if(e&&e.code==='permission-denied') cb({docs:[]}); else err&&err(e); }); } });
+  return {doc:docApi, collection:colApi};
+}
+function fbDownloads(){ return {save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),8000); return {status:'saved'}; }}; }
+// Photos are stored as compressed images inside Firestore (no paid Storage plan needed)
+function fbAssets(){ return {
+  async upload(blob){ let max=1400,q=0.72,url='';
+    const bmp=await createImageBitmap(blob);
+    for(let i=0;i<6;i++){ const k=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); url=c.toDataURL('image/jpeg',q); if(url.length<700000) break; max=Math.round(max*0.8); q=Math.max(0.5,q-0.06); }
+    if(url.length>=900000) throw Object.assign(new Error('too big'),{code:'quota_exceeded'});
+    return {id:'img_'+uid(), url}; },
+  async delete(){ } }; }
+function fbUser(){ const u=FB.user, m=FB.member||{}; const owner=!!OWNER&&(u.email||'').toLowerCase()===OWNER;
+  return { id:async()=>u.uid, isOwner:async()=>owner, canEdit:async()=>owner||m.role==='staff', can:async()=>true }; }
+
+/* ---------- sign-in ---------- */
+async function fbGoogle(){ const p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
+  try{ await FB.auth.signInWithPopup(p); }catch(e){ if(/popup/.test(e.code||'')) await FB.auth.signInWithRedirect(p); else toast('Sign-in didn’t finish: '+(e.message||e.code)); } }
+async function fbEmailLink(email){ email=(email||'').trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Enter a full email address.');
+  try{ await FB.auth.sendSignInLinkToEmail(email,{url:location.origin+location.pathname,handleCodeInApp:true}); try{localStorage.setItem('cs12:emailForSignIn',email)}catch(e){} FB.linkSent=email; render(); }catch(e){ toast('Couldn’t send the link: '+(e.message||e.code)); } }
+async function fbFinishLink(){ if(!FB.auth.isSignInWithEmailLink(location.href)) return;
+  let email=null; try{ email=localStorage.getItem('cs12:emailForSignIn'); }catch(e){}
+  if(!email) email=window.prompt('Confirm the email address you used to get this sign-in link:');
+  if(!email) return;
+  try{ await FB.auth.signInWithEmailLink(email,location.href); try{localStorage.removeItem('cs12:emailForSignIn')}catch(e){} history.replaceState(null,'',location.pathname); }catch(e){ toast('That sign-in link expired or was already used. Request a new one.'); } }
+async function fbSignOut(){ try{ await FB.auth.signOut(); }catch(e){} location.hash=''; location.reload(); }
+async function fbRequestAccess(name){ if(!name.trim()) return toast('Enter your name as it appears on the roster.');
+  try{ await FB.fs.doc('requests/'+FB.user.email.toLowerCase()).set({email:FB.user.email.toLowerCase(),name:name.trim(),uid:FB.user.uid,created:new Date().toISOString()}); FB.requested=true; render(); toast('Request sent to squadron staff'); }catch(e){ toast('Couldn’t send the request. Try again.'); } }
+
+function signInPanel(){
+  const st=S.edit.signin||(S.edit.signin={email:'',name:''});
+  if(!fbConfigured()) return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Squadron Hub'),h('p',{class:'muted'},'The squadron hub isn’t connected yet. The site owner needs to paste the Firebase settings into config.js.'));
+  if(FB.state==='out') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Sign in to the Squadron Hub'),
+    h('p',{class:'muted'},'The Dozen Daily, My Squadron, duty schedules, taskers, DIRT and photos are for CS-12 members. Sign in, then request access once.'),
+    h('button',{class:'btn pri',style:'margin:6px auto 0',onclick:fbGoogle},'Continue with Google'),
+    h('div',{class:'small muted',style:'margin:14px 0 6px'},'Or get a one-time sign-in link by email (works with any address):'),
+    FB.linkSent? h('div',{class:'banner info small'},'Link sent to ',h('b',null,FB.linkSent),'. Open it on this device to finish signing in. Check junk mail if it’s not there in a minute.')
+    : h('div',{class:'row',style:'justify-content:center'},h('input',{type:'email',id:'fbem',placeholder:'you@example.com',value:st.email,style:'max-width:260px',oninput:e=>st.email=e.target.value,onkeydown:e=>{if(e.key==='Enter') fbEmailLink(st.email)}}),h('button',{class:'btn',onclick:()=>fbEmailLink(st.email)},'Email me a link')));
+  if(FB.state==='pending') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},FB.requested?'Request sent':'Request access'),
+    h('p',{class:'muted'},'Signed in as ',h('b',null,FB.user.email),'. ',FB.requested?'Squadron staff will approve you soon. Refresh this page once they do.':'Squadron staff approve each member once.'),
+    FB.requested?null:h('div',{class:'row',style:'justify-content:center'},h('input',{type:'text',id:'fbnm',placeholder:'Name as it appears on the roster',value:st.name,style:'max-width:280px',oninput:e=>st.name=e.target.value}),h('button',{class:'btn pri',onclick:()=>fbRequestAccess(st.name)},'Request access')),
+    h('button',{class:'btn sm',style:'margin:12px auto 0',onclick:fbSignOut},'Sign out'));
+  return h('div');
+}
+
+/* ---------- Access tab (staff): approve members, set staff, import data ---------- */
+VIEWS.access=function(){
+  if(!S.canEdit) return emptyState('Staff only.');
+  const st=S.edit.acc||(S.edit.acc={email:'',role:'member',name:''});
+  const reqs=FB.requests||[], mems=(FB.members||[]).slice().sort((a,b)=>(a.role===b.role?0:a.role==='staff'?-1:1)||a.id.localeCompare(b.id));
+  const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('Only staff can do that.'); } };
+  const remove=async e=>{ try{ await FB.fs.doc('members/'+e).delete(); toast('Removed'); }catch(x){ toast('Only staff can do that.'); } };
+  return h('div',{class:'stack'},head('Access','Who can sign in to the squadron hub. Staff get edit rights and the locked tabs.'),
+    h('div',{class:'grid2'},
+      h('div',{class:'panel'},h('h3',null,'Requests ',reqs.length?h('span',{class:'chip Sent'},String(reqs.length)):null),
+        reqs.length?h('ul',{class:'list'},reqs.map(r=>h('li',null,h('div',{class:'grow'},h('b',null,r.name||'(no name)'),h('div',{class:'small muted mono'},r.id)),
+          h('button',{class:'btn sm pri',onclick:()=>approve(r.id,'member',r.name)},'Approve'),h('button',{class:'btn sm',onclick:()=>approve(r.id,'staff',r.name)},'As staff'),
+          confirmBtn('Deny',()=>FB.fs.doc('requests/'+r.id).delete().catch(()=>toast('Only staff can do that.')))))):h('p',{class:'muted'},'No one is waiting.'),
+        h('h4',{style:'margin-top:16px'},'Add someone directly'),
+        h('div',{class:'fgrid'},fld(st,'email','Email',{id:'acem'}),fld(st,'name','Name',{id:'acnm'}),fld(st,'role','Access',{type:'select',options:['member','staff'],id:'acrl'})),
+        h('button',{class:'btn pri',style:'margin-top:8px',onclick:()=>{ approve(st.email,st.role,st.name); st.email=''; st.name=''; }},'Add')),
+      h('div',{class:'panel'},h('h3',null,`Members (${mems.length})`),
+        mems.length?h('div',{class:'tw',style:'max-height:60vh'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Email'),h('th',null,'Name'),h('th',null,'Access'),h('th',null,''))),
+          h('tbody',null,mems.map(m=>h('tr',null,h('td',{class:'small mono',style:'overflow-wrap:anywhere'},m.id),h('td',{class:'small'},m.name||''),
+            h('td',null,h('select',{'aria-label':'Access for '+m.id,onchange:e=>FB.fs.doc('members/'+m.id).set({role:e.target.value},{merge:true}).catch(()=>toast('Only staff can do that.'))},['member','staff'].map(o=>{ const op=h('option',{value:o},o); if(m.role===o) op.selected=true; return op; }))),
+            h('td',null,m.id===OWNER?h('span',{class:'small muted'},'owner'):confirmBtn('Remove',()=>remove(m.id)))))))):h('p',{class:'muted'},'No members yet. Approve requests or add people on the left.'))),
+    S.isOwner?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'One-time move from the Claude version. Pick the cs12-data-import.json file (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced.'),
+      h('input',{type:'file',accept:'application/json,.json',onchange:async e=>{ const f=e.target.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); const n=await fbImport(data); toast(`Imported ${n} records`); }catch(x){ console.error(x); toast('Import failed: '+(x.message||x)); } }})):null);
+};
+async function fbImport(data){ const paths=Object.keys(data); let b=FB.fs.batch(), n=0, inBatch=0;
+  for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbEnc(data[p])); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
+  if(inBatch) await b.commit(); return n; }
+
+/* ---------- boot ---------- */
+const _appBoot=boot;
+function publicMode(){
+  window.PUBLIC=true; window.claude=undefined;
+  TABS.splice(0,TABS.length,...PUB_TABS,['hub','Squadron Hub']);
+  S.ready=true; S.nodb=false; S.db=null; S.canEdit=false; S.canWrite=false; S.downloads=fbDownloads();
+  S.docs['config/site']=PUBLIC_SITE;
+  sendHeadsUp=async()=>{}; saveMyDraft=async()=>{}; sendDiscipline=async()=>{};
+  if(!TABS.some(t=>t[0]===S.tab)) S.tab=FB.state==='loading'?'builder':'hub';
+}
+VIEWS.hub=signInPanel;
+boot=async function(){
+  if(!fbConfigured()){ FB.state='out'; publicMode(); render(); return; }
+  if(!firebase.apps.length) firebase.initializeApp(window.FIREBASE_CONFIG);
+  FB.auth=firebase.auth(); FB.fs=firebase.firestore();
+  try{ await FB.fs.enablePersistence({synchronizeTabs:true}); }catch(e){}
+  try{ await FB.auth.getRedirectResult(); }catch(e){}
+  await fbFinishLink();
+  const want=S.tab; publicMode(); render();
+  let started=false;
+  FB.auth.onAuthStateChanged(async u=>{
+    if(started){ if(!u||u.uid!==FB.user.uid) location.reload(); return; }
+    FB.user=u;
+    if(!u){ FB.state='out'; render(); return; }
+    const em=(u.email||'').toLowerCase();
+    let m=null; try{ const s=await FB.fs.doc('members/'+em).get(); m=s.exists?s.data():null; }catch(e){}
+    if(!m&&OWNER&&em===OWNER){ m={role:'staff',name:'Owner'}; try{ await FB.fs.doc('members/'+em).set({role:'staff',name:u.displayName||'Owner',added:new Date().toISOString()},{merge:true}); }catch(e){} }
+    if(!m){ FB.state='pending'; try{ FB.requested=(await FB.fs.doc('requests/'+em).get()).exists; }catch(e){} S.tab='hub'; render(); return; }
+    started=true; FB.state='member'; FB.member=m; window.PUBLIC=false;
+    TABS.splice(0,TABS.length,...FULL_TABS); if(m.role==='staff'||em===OWNER) TABS.push(['access','Access 🔑']);
+    S.tab=TABS.some(t=>t[0]===want)?want:'home';
+    sendHeadsUp=_sendHeadsUp; saveMyDraft=_saveMyDraft; sendDiscipline=_sendDiscipline;
+    const db=fbDb(), user=fbUser(), dl=fbDownloads(), assets=fbAssets();
+    window.claude={use:async cap=>({db,user,downloads:dl,assets})[cap]||null};
+    S.ready=false; S.docs={};
+    await _appBoot();
+    if(S.canEdit){
+      FB.fs.collection('requests').onSnapshot(q=>{FB.requests=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
+      FB.fs.collection('members').onSnapshot(q=>{FB.members=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
+    }
+  });
+};
+const FULL_TABS=TABS.slice();
+const _sendHeadsUp=sendHeadsUp, _saveMyDraft=saveMyDraft, _sendDiscipline=sendDiscipline;
+const _renderTabs0=renderTabs;
+renderTabs=function(){ _renderTabs0();
+  const who=$('#who');
+  if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')); }
+  else if(FB.state==='pending') who.replaceChildren(h('button',{class:'btn sm',style:'background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',onclick:fbSignOut},'Sign out'));
+  else if(fbConfigured()) who.replaceChildren(h('button',{class:'btn sm sun',onclick:()=>go('hub')},'Sign in'));
+  else who.replaceChildren(h('span',{class:'pill view'},'Public site'));
+};
+</script>
+<script>
+(function(){
+  const sub=ls('sub'); if(sub) S.sub=sub;
+  let hash=(location.hash||'').slice(1); if(hash==='oconus'){ hash='builder'; S.sub.doc='oconus'; } if(hash==='taskers'){ hash='sqstaff'; S.sub.sqrole='taskers'; } if(hash==='logistics'){ hash='sqstaff'; S.sub.sqrole='recall'; } const t=TABS.some(x=>x[0]===hash)?hash:(ls('tab')||'home');
+  S.tab=TABS.some(x=>x[0]===t)?t:'home';
+  boot();
+})();
+</script>
+
 </body>
 </html>

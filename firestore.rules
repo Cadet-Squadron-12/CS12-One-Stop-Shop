@@ -1,0 +1,57 @@
+rules_version = '2';
+// CS-12 One Stop Shop — paste this whole file into Firebase console → Firestore Database → Rules → Publish.
+// Only approved members can read anything. Staff (and the owner) can edit squadron-wide records.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function em() { return request.auth.token.email.lower(); }
+    function isOwner() { return signedIn() && em() == 'sophiekent04@gmail.com'; }
+    function memberDoc() { return /databases/$(database)/documents/members/$(em()); }
+    function isMember() { return isOwner() || (signedIn() && exists(memberDoc())); }
+    function isStaff() { return isOwner() || (isMember() && get(memberDoc()).data.role == 'staff'); }
+    function stamped() { return request.resource.data.by == request.auth.uid; }
+
+    // Who can sign in
+    match /members/{e} {
+      allow read: if isStaff() || (signedIn() && e == em());
+      allow write: if isStaff();
+    }
+    match /requests/{e} {
+      allow read: if isStaff() || (signedIn() && e == em());
+      allow create, update: if signedIn() && e == em();
+      allow delete: if isStaff() || (signedIn() && e == em());
+    }
+
+    // Staff-only: contacts, door code, notes, A4/6 import
+    match /staff/{d} {
+      allow read, write: if isStaff();
+    }
+    // Form 10 / 174 notices: the cadet who filed it and staff
+    match /discipline/{u} {
+      allow read: if isStaff() || (isMember() && u == request.auth.uid);
+      allow write: if (isStaff() || (isMember() && u == request.auth.uid)) && stamped();
+      allow delete: if isStaff();
+    }
+    // My Squadron: private to each person
+    match /data/users/{u}/{d} {
+      allow read, delete: if isMember() && u == request.auth.uid;
+      allow create, update: if isMember() && u == request.auth.uid && stamped();
+    }
+    // Photos: anyone can post, only the poster or staff can remove
+    match /photos/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && stamped();
+      allow update, delete: if isStaff() || (isMember() && resource.data.by == request.auth.uid);
+    }
+
+    // Everything else: members read; staff-only edits for the core squadron records
+    match /{c}/{d} {
+      allow read: if isMember() && !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']);
+      allow create, update: if stamped() && !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']) &&
+        (c in ['config', 'roster', 'sdo', 'life', 'grids'] ? isStaff() : isMember());
+      allow delete: if !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']) &&
+        (c in ['config', 'roster', 'sdo', 'life', 'grids'] ? isStaff() : isMember());
+    }
+  }
+}
