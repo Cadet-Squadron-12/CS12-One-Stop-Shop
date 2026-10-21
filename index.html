@@ -2132,13 +2132,12 @@ function a46Settings(){
 }
 </script>
 <script>
-const PUBLIC_SITE={links:[{"label": "USAFA Phone Number Reference List", "url": "https://www.usafa.af.mil/Portals/21/documents/Home/2018_Phone_List.pdf?ver=2018-06-13-130324-243"}, {"label": "Helping Agencies", "url": "https://www.usafa.edu/helping-agencies/"}, {"label": "CMTS", "url": "https://usafa0.sharepoint.com/CW/CWT/Lists/CMTS_and_CW_Calendar/CW%20Master%20Calendar.aspx"}, {"label": "FalconNet", "url": "https://falconnet.us/"}]};
 /* ================= FIREBASE BACKEND =================
    Swaps Claude's storage for Firebase (Auth + Firestore) behind the same small API the app already uses,
    so every tab keeps working unchanged. Each record is stored as one JSON string ("j") because some
    grids hold arrays inside arrays, which Firestore can't store natively. */
 const FB={ state:'loading', user:null, member:null, fs:null, auth:null };
-const PUB_TABS=[['builder','Paperwork Builder'],['links','Docs & Links']];
+const PUB_TABS=[];
 const OWNER=(window.CS12_OWNER||'').toLowerCase();
 
 function fbConfigured(){ const c=window.FIREBASE_CONFIG; return !!(c&&c.apiKey&&!/PASTE/.test(c.apiKey)&&window.firebase); }
@@ -2194,17 +2193,17 @@ async function fbRequestAccess(name){ if(!name.trim()) return toast('Enter your 
 function signInPanel(){
   const st=S.edit.signin||(S.edit.signin={email:'',name:''});
   if(!fbConfigured()) return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Squadron Hub'),h('p',{class:'muted'},'The squadron hub isn’t connected yet. The site owner needs to paste the Firebase settings into config.js.'));
-  if(FB.state==='out') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Sign in to the Squadron Hub'),
-    h('p',{class:'muted'},'The Dozen Daily, My Squadron, duty schedules, taskers, DIRT and photos are for CS-12 members. Sign in, then request access once.'),
+  if(FB.state==='out') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'CS-12 members only'),
+    h('p',{class:'muted'},'Sign in with the email address squadron staff gave access to. Everything on this site is for Cadet Squadron 12 members.'),
     h('button',{class:'btn pri',style:'margin:6px auto 0',onclick:fbGoogle},'Continue with Google'),
-    h('div',{class:'small muted',style:'margin:14px 0 6px'},'Or get a one-time sign-in link by email (works with any address):'),
+    h('div',{class:'small muted',style:'margin:14px 0 6px'},'Or get a one-time sign-in link by email (works with any address, including your afacademy email):'),
     FB.linkSent? h('div',{class:'banner info small'},'Link sent to ',h('b',null,FB.linkSent),'. Open it on this device to finish signing in. Check junk mail if it’s not there in a minute.')
     : h('div',{class:'row',style:'justify-content:center'},h('input',{type:'email',id:'fbem',placeholder:'you@example.com',value:st.email,style:'max-width:260px',oninput:e=>st.email=e.target.value,onkeydown:e=>{if(e.key==='Enter') fbEmailLink(st.email)}}),h('button',{class:'btn',onclick:()=>fbEmailLink(st.email)},'Email me a link')));
-  if(FB.state==='pending') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},FB.requested?'Request sent':'Request access'),
-    h('p',{class:'muted'},'Signed in as ',h('b',null,FB.user.email),'. ',FB.requested?'Squadron staff will approve you soon. Refresh this page once they do.':'Squadron staff approve each member once.'),
+  if(FB.state==='pending') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},FB.requested?'Request sent':'No access yet'),
+    h('p',{class:'muted'},'Signed in as ',h('b',null,FB.user.email),'. ',FB.requested?'Squadron staff will approve you soon. Refresh this page once they do.':'This email isn’t on the CS-12 access list. If you used a different email for the squadron, sign out and try that one. Otherwise, request access below.'),
     FB.requested?null:h('div',{class:'row',style:'justify-content:center'},h('input',{type:'text',id:'fbnm',placeholder:'Name as it appears on the roster',value:st.name,style:'max-width:280px',oninput:e=>st.name=e.target.value}),h('button',{class:'btn pri',onclick:()=>fbRequestAccess(st.name)},'Request access')),
     h('button',{class:'btn sm',style:'margin:12px auto 0',onclick:fbSignOut},'Sign out'));
-  return h('div');
+  return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('p',{class:'muted'},'Checking your sign-in…'));
 }
 
 /* ---------- Access tab (staff): approve members, set staff, import data ---------- */
@@ -2220,7 +2219,11 @@ VIEWS.access=function(){
         reqs.length?h('ul',{class:'list'},reqs.map(r=>h('li',null,h('div',{class:'grow'},h('b',null,r.name||'(no name)'),h('div',{class:'small muted mono'},r.id)),
           h('button',{class:'btn sm pri',onclick:()=>approve(r.id,'member',r.name)},'Approve'),h('button',{class:'btn sm',onclick:()=>approve(r.id,'staff',r.name)},'As staff'),
           confirmBtn('Deny',()=>FB.fs.doc('requests/'+r.id).delete().catch(()=>toast('Only staff can do that.')))))):h('p',{class:'muted'},'No one is waiting.'),
-        h('h4',{style:'margin-top:16px'},'Add someone directly'),
+        h('h4',{style:'margin-top:16px'},'Add a list of people'),
+        h('p',{class:'small muted',style:'margin:0 0 6px'},'Paste one person per line: email, then a name if you like. Add the word staff on a line to give that person staff access. Example: jane.doe@afacademy.af.edu, Jane Doe, staff'),
+        h('textarea',{id:'acbulk',rows:6,placeholder:'c27first.last@afacademy.af.edu, First Last\nfriend@gmail.com, Name, staff',value:st.bulk||'',oninput:e=>st.bulk=e.target.value}),
+        h('button',{class:'btn pri',style:'margin-top:8px',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const n=await fbBulkAdd(st.bulk||'',mems); if(n){ st.bulk=''; toast(`Added ${n} ${n===1?'person':'people'}`+(fbBulkAdd.skipped?` · skipped ${fbBulkAdd.skipped} line${fbBulkAdd.skipped===1?'':'s'} with no email`:'')); render(); } }finally{ b.disabled=false; } }},'Add everyone'),
+        h('h4',{style:'margin-top:16px'},'Add one person'),
         h('div',{class:'fgrid'},fld(st,'email','Email',{id:'acem'}),fld(st,'name','Name',{id:'acnm'}),fld(st,'role','Access',{type:'select',options:['member','staff'],id:'acrl'})),
         h('button',{class:'btn pri',style:'margin-top:8px',onclick:()=>{ approve(st.email,st.role,st.name); st.email=''; st.name=''; }},'Add')),
       h('div',{class:'panel'},h('h3',null,`Members (${mems.length})`),
@@ -2231,6 +2234,22 @@ VIEWS.access=function(){
     S.isOwner?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'One-time move from the Claude version. Pick the cs12-data-import.json file (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced.'),
       h('input',{type:'file',accept:'application/json,.json',onchange:async e=>{ const f=e.target.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); const n=await fbImport(data); toast(`Imported ${n} records`); }catch(x){ console.error(x); toast('Import failed: '+(x.message||x)); } }})):null);
 };
+async function fbBulkAdd(text,mems){
+  const have=new Map((mems||[]).map(m=>[m.id,m])); const rows=[]; const bad=[];
+  text.split(/\r?\n/).forEach(line=>{ if(!line.trim()) return; const m=line.match(/[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/); if(!m){ bad.push(line.trim()); return; }
+    const email=m[0].toLowerCase(); const staff=/\bstaff\b/i.test(line.replace(m[0],''));
+    const name=line.replace(m[0],'').replace(/\bstaff\b/ig,'').replace(/\bmember\b/ig,'').replace(/[<>,;"'\t]+/g,' ').replace(/\s+/g,' ').trim();
+    rows.push({email,staff,name}); });
+  fbBulkAdd.skipped=bad.length;
+  if(bad.length&&!rows.length) toast(`No emails found in ${bad.length} line${bad.length===1?'':'s'}.`);
+  if(!rows.length){ if(!bad.length) toast('Paste at least one email.'); return 0; }
+  let b=FB.fs.batch(), k=0, n=0;
+  try{
+    for(const r of rows){ const old=have.get(r.email); const doc={role:r.staff?'staff':(old?old.role:'member'),name:r.name||(old&&old.name)||'',added:(old&&old.added)||new Date().toISOString(),addedBy:(old&&old.addedBy)||FB.user.email};
+      b.set(FB.fs.doc('members/'+r.email),doc); b.delete(FB.fs.doc('requests/'+r.email)); n++; if(++k>=200){ await b.commit(); b=FB.fs.batch(); k=0; } }
+    if(k) await b.commit();
+  }catch(x){ console.error(x); toast('Only staff can add people.'); return 0; }
+  return n; }
 async function fbImport(data){ const paths=Object.keys(data); let b=FB.fs.batch(), n=0, inBatch=0;
   for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbEnc(data[p])); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
   if(inBatch) await b.commit(); return n; }
@@ -2239,11 +2258,10 @@ async function fbImport(data){ const paths=Object.keys(data); let b=FB.fs.batch(
 const _appBoot=boot;
 function publicMode(){
   window.PUBLIC=true; window.claude=undefined;
-  TABS.splice(0,TABS.length,...PUB_TABS,['hub','Squadron Hub']);
-  S.ready=true; S.nodb=false; S.db=null; S.canEdit=false; S.canWrite=false; S.downloads=fbDownloads();
-  S.docs['config/site']=PUBLIC_SITE;
+  TABS.splice(0,TABS.length);
+  S.ready=true; S.nodb=false; S.db=null; S.canEdit=false; S.canWrite=false; S.downloads=null; S.docs={};
   sendHeadsUp=async()=>{}; saveMyDraft=async()=>{}; sendDiscipline=async()=>{};
-  if(!TABS.some(t=>t[0]===S.tab)) S.tab=FB.state==='loading'?'builder':'hub';
+  S.tab='hub';
 }
 VIEWS.hub=signInPanel;
 boot=async function(){
@@ -2284,8 +2302,8 @@ renderTabs=function(){ _renderTabs0();
   const who=$('#who');
   if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')); }
   else if(FB.state==='pending') who.replaceChildren(h('button',{class:'btn sm',style:'background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',onclick:fbSignOut},'Sign out'));
-  else if(fbConfigured()) who.replaceChildren(h('button',{class:'btn sm sun',onclick:()=>go('hub')},'Sign in'));
-  else who.replaceChildren(h('span',{class:'pill view'},'Public site'));
+  else who.replaceChildren();
+  $('#tabs').hidden=FB.state!=='member';
 };
 </script>
 <script>
