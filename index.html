@@ -260,7 +260,7 @@ const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 
 /* ---------- app state ---------- */
 const S={docs:{}, photos:[], dirt:[], actions:[], ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
-const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/coc','a46/vault','staff/a46import'];
+const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','a46/vault','staff/a46import'];
 const D=p=>S.docs[p];
 
 async function boot(){
@@ -303,8 +303,8 @@ async function copy(text){ try{ await navigator.clipboard.writeText(text); toast
 
 /* ---------- tabs ---------- */
 const TABS=[
-  ['home','Dozen Daily'],['me','My Squadron'],['sqstaff','Sq Staff 🔒'],['builder','Paperwork Builder'],
-  ['a46','A4/6 🔒'],['staffs','Staffs'],['duty','Duty'],['roster','Roster'],['life','Squadron Life'],['links','Docs & Links']
+  ['home','Dozen Daily'],['me','My Squadron'],['builder','Paperwork Builder'],['duty','Duty'],['roster','Roster'],
+  ['life','Squadron Life'],['links','Squadron Info'],['sqstaff','Sq Staff 🔒'],['a46','A4/6 🔒']
 ];
 function go(t){ S.tab=t; try{ history.replaceState(null,'','#'+t) }catch(e){} ls('tab',t); render(); window.scrollTo({top:0}); }
 function renderTabs(){
@@ -374,7 +374,7 @@ VIEWS.home=function(){
       h('h2',{class:'daily-name'},'The Dirty Dozen Daily'),
       h('div',{class:'daily-tag'},'All the dirt that’s fit to print, delivered before step brief.')),
     h('div',{class:'grid3'},
-      h('div',{class:'panel'},h('h4',null,'Senior of the Day'),
+      h('div',{class:'panel'},h('h4',null,'Squadron Duty Officer'),
         sdoNote?h('div',{class:'stamp'},sdoNote):null,
         h('div',{class:'big-name'},sdoName||'Not scheduled'),
         sdoName&&S.canEdit&&contactFor(sdoName)?h('div',{class:'mono small'},contactFor(sdoName).phone):null,
@@ -486,9 +486,9 @@ VIEWS.staffs=function(){
 <script>
 /* ================= DUTY ================= */
 VIEWS.duty=function(){
-  const [cur,segEl]=seg('duty',[['sdo','SDO schedule'],['cq','CQ sign-up'],['allcall','All Call']],'sdo');
-  return h('div',{class:'stack'},head('Duty','Senior of the Day, CQ shifts and All Call accountability.',segEl),
-    cur==='sdo'?sdoView():cur==='cq'?cqView():checklistView('allcall/board','groups','here','All Call','Tick each cadet as they’re accounted for.'));
+  const [cur,segEl]=seg('duty',[['sdo','SDO schedule'],['cq','CQ sign-up']],'sdo');
+  return h('div',{class:'stack'},head('Duty','Squadron Duty Officer schedule and CQ shifts.',segEl),
+    cur==='cq'?cqView():sdoView());
 };
 function sdoView(){
   const s=D('sdo/schedule'); if(!s) return emptyState('No SDO schedule yet.');
@@ -617,9 +617,10 @@ async function saveUmd(si,pi,f){
 }
 
 /* generic sheet grid (rooming, lockers, Mitch's, CoC…) */
-function gridView(path){
+function gridView(path,canEd){
+  if(canEd===undefined) canEd=S.canEdit;
   const g=D(path); if(!g) return emptyState('Nothing here yet.');
-  const ed=S.canEdit&&S.edit.grid===path;
+  const ed=canEd&&S.edit.grid===path;
   const skip=new Set(); const span={};
   (g.merges||[]).forEach(([r1,c1,r2,c2])=>{ span[r1+','+c1]=[r2-r1+1,c2-c1+1]; for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++) if(r!==r1||c!==c1) skip.add(r+','+c); });
   const q=norm(S.sub['gq'+path]||'');
@@ -635,7 +636,7 @@ function gridView(path){
   }
   return h('div',{class:'stack'},
     h('div',{class:'row'},h('h3',{style:'margin:0'},g.title),h('span',{class:'spacer'}),h('input',{type:'text',id:'gq'+path,placeholder:'Highlight a name…',style:'max-width:220px',value:S.sub['gq'+path]||'',onchange:e=>{S.sub['gq'+path]=e.target.value;render()}}),
-      S.canEdit?h('button',{class:'btn'+(ed?' sun':''),onclick:()=>{S.edit.grid=ed?null:path;S.edit.gridCell=null;render()}},ed?'Done editing':'Edit cells'):null),
+      canEd?h('button',{class:'btn'+(ed?' sun':''),onclick:()=>{S.edit.grid=ed?null:path;S.edit.gridCell=null;render()}},ed?'Done editing':'Edit cells'):null),
     ed?h('div',{class:'banner info small'},'Click any cell to change it. Press Enter to save.'):null,
     h('div',{class:'tw',style:'padding:8px;max-height:75vh'},h('table',{class:'sheet'},h('tbody',null,trs))));
 }
@@ -727,11 +728,40 @@ VIEWS._links=function(compact){
     !compact&&S.canEdit? h('div',{class:'row',style:'margin-top:10px'},h('input',{type:'text',id:'nll',placeholder:'Label',style:'max-width:220px',value:nl.label,oninput:e=>nl.label=e.target.value}),h('input',{type:'text',id:'nlu',placeholder:'https://…',style:'max-width:320px',value:nl.url,oninput:e=>nl.url=e.target.value}),
       h('button',{class:'btn pri',onclick:()=>{ if(!/^https:\/\//.test(nl.url)) return toast('Links need to start with https://'); upd('config/site',{links:[...links,{label:nl.label||nl.url,url:nl.url}]}); S.edit.newLink=null; }},'Add link')):null);
 };
+/* AOC / AMT contacts: visible to every signed-in member, editable by staff */
+const LEADERS_DEFAULT=[{name:'Maj Roz Chromy',role:'Air Officer Commanding (AOC)',phone:'719-373-5428',email:''},{name:'MSgt Clapp',role:'Academy Military Trainer (AMT)',phone:'848-464-7424',email:''}];
+function leadersPanel(){
+  const site=D('config/site')||{}; const list=(site.leaders&&site.leaders.length)?site.leaders:LEADERS_DEFAULT;
+  const ed=S.edit.leaders;
+  if(ed) return h('div',{class:'panel'},h('h3',null,'Squadron leadership'),
+    ed.map((p,i)=>h('div',{class:'fgrid',style:'margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)'},
+      fld(p,'name','Name',{id:'ldn'+i}),fld(p,'role','Role',{id:'ldr'+i}),fld(p,'phone','Phone',{id:'ldp'+i,type:'tel'}),fld(p,'email','Email',{id:'lde'+i,type:'email'}))),
+    h('div',{class:'row'},h('button',{class:'btn pri',onclick:async()=>{ await upd('config/site',{leaders:ed.map(p=>({name:(p.name||'').trim(),role:(p.role||'').trim(),phone:(p.phone||'').trim(),email:(p.email||'').trim()})).filter(p=>p.name)}); S.edit.leaders=null; toast('Saved'); render(); }},'Save'),
+      h('button',{class:'btn',onclick:()=>{ ed.push({name:'',role:'',phone:'',email:''}); render(); }},'Add a person'),
+      h('button',{class:'btn',onclick:()=>{ S.edit.leaders=null; render(); }},'Cancel')));
+  const tel=n=>'tel:'+String(n).replace(/[^\d+]/g,'');
+  return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Squadron leadership'),h('span',{class:'spacer'}),S.canEdit?h('button',{class:'btn sm',onclick:()=>{ S.edit.leaders=JSON.parse(JSON.stringify(list)); render(); }},'Edit'):null),
+    h('ul',{class:'list',style:'margin-top:8px'},list.map(p=>h('li',null,h('div',{class:'grow'},h('b',null,p.name),h('div',{class:'small muted'},p.role)),
+      h('div',{class:'small mono',style:'text-align:right;overflow-wrap:anywhere'},p.phone?h('a',{href:tel(p.phone)},p.phone):null,p.phone?h('br'):null,
+        p.email?h('a',{href:'mailto:'+p.email},p.email):(S.canEdit?h('span',{class:'muted'},'add email: Edit'):null))))));
+}
+/* Seating, lockers and rooming: everyone can look, the SEL keeps them current */
+function isSel(){ const p=(typeof identify==='function')?identify():null; return !!p&&/Senior Enlisted Leader/i.test(p.pos||''); }
+function canEditSel(){ return !!S.isOwner||(S.canEdit&&isSel()); }
+function selGrid(path){ const can=canEditSel();
+  return h('div',{class:'stack'},h('div',{class:'banner info small'},h('b',null,'Kept current by the SEL. '),can?'You can edit this: click Edit cells, then click any cell.':'See something wrong? Let the SEL know.'),gridView(path,can)); }
 VIEWS.links=function(){
+  const [cur,segEl]=seg('info',[['info','Contacts & links'],['mitch','Mitch’s seating'],['locker','Storage lockers'],['rooming','Rooming']],'info');
+  if(cur!=='info') return h('div',{class:'stack'},head('Squadron Info','Contacts, links, seating, lockers and rooms.',segEl),
+    selGrid({mitch:'grids/mitches',locker:'grids/lockers',rooming:'grids/rooming'}[cur]));
+  return VIEWS._info(segEl);
+};
+VIEWS._info=function(segEl){
   const r=D('roster/main'); const key=['Squadron Commander','Squadron Chief of Staff','Squadron Senior Enlisted Leader','Squadron First Sergeant','Squadron Executive','Squadron A1 Division Chief','Squadron A2 Division Chief','Squadron A3 Division Chief','Squadron A4/A6 Division Chief','Squadron Standardization/Evaluation Officer'];
   const ppl=allPeople().filter(p=>key.includes((p.pos||'').trim()));
-  return h('div',{class:'stack'},head('Docs & Links','Reference material, key contacts and quick links.'),
+  return h('div',{class:'stack'},head('Squadron Info','Contacts, links, seating, lockers and rooms.',segEl),
     h('div',{class:'grid2'},
+      leadersPanel(),
       VIEWS._links(false),
       window.PUBLIC?null:h('div',{class:'panel'},h('h3',null,'Key contacts'),r?h('div',{class:'small muted',style:'margin-bottom:6px'},'Unit Commander: '+r.unitCC):null,
         h('ul',{class:'list'},ppl.map(p=>{const c=S.canEdit?contactFor(p.name):null; return h('li',null,h('div',{class:'grow'},h('b',null,p.rank+' '+p.name),h('div',{class:'small muted'},p.pos.replace('Squadron ',''))),c?h('div',{class:'small mono',style:'text-align:right;overflow-wrap:anywhere'},c.phone,h('br'),c.email):null)})))),
@@ -964,6 +994,7 @@ function fld(obj,key,label,opts={}){
   return h('label',{class:'f'+(opts.wide?' wide':'')},label,opts.hint?h('span',{class:'h'},opts.hint):null,ctl);
 }
 function rosterPick(obj,key,label,onPick,opts={}){
+  if(opts.me&&!obj[key]&&typeof identify==='function'){ const p=identify(); if(p){ obj[key]=p.name; if(onPick) onPick(p); bsave(); } }
   return fld(obj,key,label,{...opts,list:'bnames',live:true,onchange:e=>{ const p=allPeople().find(x=>norm(x.name)===norm(e.target.value)); if(p&&onPick){ onPick(p); bsave(); render(); } }});
 }
 const classOf=p=>({C1C:'2027',C2C:'2028',C3C:'2029',C4C:'2030'})[p.cls]||'';
@@ -1032,7 +1063,7 @@ function builderEsss(){
   if(!e.summaryEdited) e.summary=esssSummary(e);
   if(!e.subjectEdited) e.subject=`Request for an eSSS pass ${md(e.depart)}${e.ret&&e.ret!==e.depart?'-'+md(e.ret):''} for ${e.cls} ${e.cadet||'[Name]'}`.replace(/\s+/g,' ');
   const days=e.depart?workdaysBetween(today(),e.depart):null; const cal=e.depart?Math.round((new Date(e.depart+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
-  const checks=[[!!e.address,'Address where you’re staying'],[!!(e.ecName&&e.ecPhone),'Emergency contact (name and phone)'],[!!e.phone,'Your cell number'],[!!e.depart,'Suspense date (departure)'],[e.attach99,'Form 99 attached (it’s probably needed)']];
+  const checks=[[!!e.address,'Address where you’re staying'],[!!(e.ecName&&e.ecPhone),'Emergency contact (name and phone)'],[!!e.phone,'Your cell number'],[!!e.depart,'Suspense date (departure)'],...(e.need99?[[!!(B.f99&&(B.f99.taken||B.f99.authorized||B.f99.merit||B.f99.make||B.f99.depFlight)),'Form 99 details filled in (leaving Colorado)']]:[])];
   const {first,last}=firstLast(e.cadet||'');
   const fname=`${ddmmm(e.depart)}-${ddmmm(e.ret||e.depart)}, ${e.city||'Location'} (${e.state||'State'}), ${e.cls} ${last||'Last'}, ${first||'First'}.pdf`;
   const reRoute=()=>{ e.routing=routingFor(e); bsave(); render(); };
@@ -1040,7 +1071,7 @@ function builderEsss(){
     cal!=null&&cal<14? h('div',{class:'banner '+(cal<7?'bad':'warn')},h('b',null,cal<7?'Less than a week out. ':'Less than 2 weeks out. '),cal<7?'PP won’t sign an eSSS sent within a week unless it’s an emergency.':'eSSSs should go up the chain 2 weeks before the event. Route it today.'):null,
     h('div',{class:'panel'},h('h3',null,'1 · Who and when'),
       h('div',{class:'fgrid'},
-        rosterPick(e,'cadet','Your name',p=>{ e.cls=p.cls||e.cls; e.year=classOf(p)||e.year; e.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c&&c.phone) e.phone=c.phone; e.routing=routingFor(e); },{ph:'Start typing your name'}),
+        rosterPick(e,'cadet','Your name',p=>{ e.cls=p.cls||e.cls; e.year=classOf(p)||e.year; e.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c&&c.phone) e.phone=c.phone; e.routing=routingFor(e); },{ph:'Start typing your name',me:true}),
         fld(e,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C']}),
         fld(e,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute}),
         fld(e,'flight','Flight or A-staff division',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1 (Personnel)'],['A2','A2 (Intel)'],['A3','A3 (Operations)'],['A46','A4/6 (Support & Comms)'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,hint:'A-staff routes through your Division Chief. Squadron and Group/Wing Staff go straight to the Sq Exec.'}),
@@ -1056,6 +1087,7 @@ function builderEsss(){
         fld(e,'address','Address where you’re staying',{wide:true,live:true}), fld(e,'lodging','Staying with',{ph:'my parents',live:true}),
         fld(e,'ecName','Emergency contact',{ph:'Full name',live:true}), fld(e,'ecRel','Relationship',{ph:'mother',live:true}), fld(e,'ecPhone','Their phone',{type:'tel',live:true}),
         fld(e,'missing','Mandatory events you’ll miss',{wide:true,ph:'Leave blank if none',live:true}))),
+    f99Panel(e),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'3 · Routing'),h('span',{class:'spacer'}),h('button',{class:'btn sm',onclick:reRoute},'Refill from roster')),
       h('p',{class:'small muted'},'Filled from the roster using your class year’s chain of command. Rows 1–5 print on the left, 6–10 on the right.'),
       h('div',{class:'tw'},h('table',{class:'t routing'},h('thead',null,h('tr',null,h('th',null,'#'),h('th',null,'To'),h('th',null,'Action'),h('th',null,'Name (rank and name)'))),
@@ -1072,7 +1104,6 @@ function builderEsss(){
     h('div',{class:'panel'},h('h3',null,'5 · Check and download'),
       h('ul',{class:'list'},checks.map(([ok,l])=>h('li',null,h('span',{class:'st '+(ok?'yes':'no')},ok?'✓':'!'),h('span',{class:'grow'},l)))),
       h('div',{class:'row',style:'margin-top:10px'},
-        h('label',{class:'ck'},h('input',{type:'checkbox',checked:e.attach99,onchange:ev=>{e.attach99=ev.target.checked;bsave();render()}}),'Attach my Form 99 (fill it on the Form 99 card)'),
         window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:e.headsUp!==false,onchange:ev=>{e.headsUp=ev.target.checked;bsave()}}),'Give my chain a heads-up on their My Squadron page')),
       h('p',{class:'small muted'},'File name: ',h('span',{class:'mono'},fname)),
       h('button',{class:'btn pri',onclick:async ev=>{
@@ -1081,18 +1112,54 @@ function builderEsss(){
           const typist=(firstLast(e.cadet).first[0]||'')+(firstLast(e.cadet).last[0]||'');
           const doc=await PDFLib.PDFDocument.create();
           await buildEsss({subject:e.subject,surname:`${e.cls} ${e.cadet}`,symbol:e.symbol,phone:e.phone,typist:typist.toUpperCase(),suspense:e.depart,created:e.created,summary:e.summary,routing:e.routing},doc);
-          if(e.attach99){ await appendPdf(doc,await buildForm99(B.f99||{})); }
+          if(e.need99){ await appendPdf(doc,await buildForm99(f99FromEsss(e))); }
           const ok=await savePdf(await doc.save(),fname);
           if(ok&&e.headsUp!==false) await sendHeadsUp('eSSS',`${e.cls} ${e.cadet}`,e.subject,e.routing,`${md(e.depart)}–${md(e.ret)} ${[e.city,e.state].filter(Boolean).join(', ')}`,e.depart);
           if(ok) await saveMyDraft('esss',e.subject||'eSSS',e);
         }catch(err){ console.error(err); toast('Couldn’t build the PDF: '+err.message); }
         btn.disabled=false;
-      }},'Download eSSS PDF'),
+      }},e.need99?'Download eSSS + Form 99 PDF':'Download eSSS PDF'),
       h('p',{class:'small muted',style:'margin:8px 0 0'},'Each routing row has a digital signature box. Open the PDF in Adobe and click a box to sign with your CAC.'))
   );
 }
 
-/* ---------- Form 99 ---------- */
+/* ---------- Form 99 inside the eSSS (only when leaving Colorado) ---------- */
+const isColorado=st=>/^\s*(co|colo\.?|colorado)\s*$/i.test(st||'');
+function f99FromEsss(e){ const f={...(B.f99||{})};
+  const when=(d,t)=>[d?fmtShort(d):'',t||''].filter(Boolean).join(' / ');
+  if(!f.name&&e.cadet) f.name=lastFirst(e.cadet);
+  if(!f.start) f.start=when(e.depart,e.departTime);
+  if(!f.ret) f.ret=when(e.ret,e.retTime);
+  if(!f.address) f.address=[e.address,[e.city,e.state].filter(Boolean).join(', ')].filter(Boolean).join(', ');
+  if(!f.phone) f.phone=e.phone||'';
+  return f; }
+function f99Panel(e){
+  const f=B.f99||(B.f99={});
+  const outOfState=!!e.state&&!isColorado(e.state);
+  const auto=f99FromEsss(e);
+  const set=v=>{ e.need99=v; bsave(); render(); };
+  return h('div',{class:'panel',style:e.need99?'border:2px solid var(--sky)':''},h('h3',null,'Form 99 · Are you leaving Colorado?'),
+    h('p',{class:'small muted',style:'margin-top:-4px'},'Only eSSSs that take you out of state need an AFCW IMT 99 (Request to Exceed Limits). If you need one, it’s added to the same PDF right after the eSSS.'),
+    outOfState&&e.need99!==true? h('div',{class:'banner warn small'},h('b',null,`${e.state} is out of state. `),'You’ll need a Form 99 with this eSSS.'):null,
+    h('div',{class:'seg',role:'group','aria-label':'Leaving Colorado?'},
+      h('button',{type:'button','aria-pressed':String(e.need99===true),onclick:()=>set(true)},'Yes, I’m leaving Colorado'),
+      h('button',{type:'button','aria-pressed':String(e.need99!==true),onclick:()=>set(false)},'No, staying in Colorado')),
+    e.need99? h('div',{class:'stack',style:'margin-top:12px'},
+      h('p',{class:'small muted',style:'margin:0'},'Name, dates, address and phone fill in from your eSSS. Type over any of them to change what prints.'),
+      h('div',{class:'fgrid'},
+        fld(f,'name','Name (Last, First, MI)',{id:'f99name',ph:auto.name||'Last, First MI',wide:true}),
+        fld(f,'start','Start (date / time)',{id:'f99start',ph:auto.start||'19 Sep 26 / 1100'}), fld(f,'ret','Return (date / time)',{id:'f99ret',ph:auto.ret||'20 Sep 26 / 2200'}),
+        fld(f,'address','Location address',{id:'f99address',ph:auto.address||'Where you’re staying',wide:true}), fld(f,'phone','Location phone',{id:'f99phone',ph:auto.phone||''}),
+        fld(f,'merit','Merit lists',{id:'f99merit'}), fld(f,'taken','Pass taken',{id:'f99taken'}), fld(f,'authorized','Authorized',{id:'f99authorized'}),
+        fld(f,'others','Other cadets going',{id:'f99others',type:'textarea',rows:2,wide:true})),
+      h('details',{class:'box',open:!!(f.make||f.plate)},h('summary',null,'Driving? Add the car'),h('div',{class:'fgrid',style:'margin-top:10px'},
+        fld(f,'carDates','Date(s)',{id:'f99carDates'}),fld(f,'make','Make',{id:'f99make'}),fld(f,'year','Year',{id:'f99year'}),fld(f,'color','Color',{id:'f99color'}),fld(f,'plate','License number',{id:'f99plate'}),fld(f,'state','State',{id:'f99state'}),fld(f,'owner','Owner',{id:'f99owner'}))),
+      h('details',{class:'box',open:!!(f.depFlight||f.arrFlight)},h('summary',null,'Flying? Add the flights'),h('div',{class:'fgrid',style:'margin-top:10px'},
+        fld(f,'depFlight','Departure flight #',{id:'f99depFlight'}),fld(f,'depAirline','Departure airline',{id:'f99depAirline'}),fld(f,'depTime','Departure date / time',{id:'f99depTime'}),
+        fld(f,'arrFlight','Arrival flight #',{id:'f99arrFlight'}),fld(f,'arrAirline','Arrival airline',{id:'f99arrAirline'}),fld(f,'arrTime','Arrival date / time',{id:'f99arrTime'})))):null);
+}
+
+/* ---------- Form 99 (stand-alone, kept for the OCONUS package) ---------- */
 function builderF99(){
   const f=B.f99||(B.f99={});
   return h('div',{class:'stack'},
@@ -1175,7 +1242,7 @@ function builderMemo(){
       fld(m,'kind','Type',{type:'select',options:[['memo','MEMORANDUM FOR…'],['mfr','MEMORANDUM FOR RECORD']]}),
       m.kind==='memo'?fld(m,'to','Memorandum for',{ph:'AFCW/CS-12'}):null,
       fld(m,'date','Date',{type:'date'}),
-      rosterPick(m,'fromName','From (your name)',p=>{ const {first,last}=firstLast(p.name); m.from=`${p.cls} ${p.name}, AFCW-12`; m.sig1=`${p.name.toUpperCase()}, ${p.rank}, USAF`; m.sig2=`${p.pos.replace('Squadron ','')}, AFCW/CS-12`; }),
+      rosterPick(m,'fromName','From (your name)',p=>{ const {first,last}=firstLast(p.name); m.from=`${p.cls} ${p.name}, AFCW-12`; m.sig1=`${p.name.toUpperCase()}, ${p.rank}, USAF`; m.sig2=`${p.pos.replace('Squadron ','')}, AFCW/CS-12`; },{me:true}),
       fld(m,'from','FROM line',{wide:true,ph:'C1C First MI Last, AFCW-12'}),
       fld(m,'subject','Subject',{wide:true}),
       fld(m,'refs','References (one per line, optional)',{type:'textarea',rows:2,wide:true}))),
@@ -1199,9 +1266,9 @@ function builderMemo(){
   );
 }
 
-const DOCTYPES=[['memo','Memo / MFR','Tongue and Quill memorandum on CS-12 letterhead'],['esss','eSSS','AF 1768 staff summary sheet, routed by class year'],['f99','Form 99','Request to Exceed Limits / Special Pass'],['f174','AF 174','Record of Individual Counseling'],['f10','Form 10','Report of Conduct'],['oconus','OCONUS package','eSSS, Form 99, itinerary, FCG and FP plans as one Adobe portfolio']];
+const DOCTYPES=[['memo','Memo / MFR','Tongue and Quill memorandum on CS-12 letterhead'],['esss','eSSS + Form 99','AF 1768 staff summary sheet routed by class year, with a Form 99 if you’re leaving Colorado'],['f174','AF 174','Record of Individual Counseling'],['f10','Form 10','Report of Conduct'],['oconus','OCONUS package','eSSS, Form 99, itinerary, FCG and FP plans as one Adobe portfolio']];
 VIEWS.builder=function(){
-  const cur=S.sub.doc||'memo';
+  if(S.sub.doc==='f99') S.sub.doc='esss'; const cur=S.sub.doc||'memo';
   const body=({memo:builderMemo,esss:builderEsss,f99:builderF99,f174:builderF174,f10:builderF10,oconus:()=>VIEWS.oconus(true)}[cur]||builderMemo)();
   return h('div',{class:'stack'},
     head('Paperwork Builder','Fill in the blanks and download a signable PDF. Your drafts stay saved in this browser until you clear them.'),
@@ -1381,7 +1448,7 @@ VIEWS.oconus=function(embedded){
     high.length?h('div',{class:'banner warn'},h('b',null,`Level ${Math.max(...high.map(c=>+c.level))} advisory: `),`${high.map(c=>c.name).join(', ')} ${high.length>1?'are':'is'} Level 3 or higher, so Col Habben is the final approval on the eSSS. The routing below already includes him.`):null,
     h('div',{class:'panel'},h('h3',null,'1 · Traveler and trip'),
       h('div',{class:'fgrid'},
-        rosterPick(o,'cadet','Your name',p=>{ o.cls=p.cls||o.cls; o.year=classOf(p)||o.year; o.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c){ if(c.phone) o.phone=c.phone; if(c.email) o.email=c.email; } o.routing=ocRouting(o); }),
+        rosterPick(o,'cadet','Your name',p=>{ o.cls=p.cls||o.cls; o.year=classOf(p)||o.year; o.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c){ if(c.phone) o.phone=c.phone; if(c.email) o.email=c.email; } o.routing=ocRouting(o); },{me:true}),
         fld(o,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C'],id:'occls'}),
         fld(o,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute,id:'ocyr'}),
         fld(o,'flight','Flight, division or staff',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1'],['A2','A2'],['A3','A3'],['A46','A4/6'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,id:'ocfl'}),
@@ -1505,11 +1572,13 @@ function myDraftsPanel(meCol){
 VIEWS.me=function(){
   if(S.nodb||!S.uid) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),emptyState('Sign in to see your personal page.'));
   const name=myName(); const st=S.edit.me||(S.edit.me={pick:'',todo:'',due:''});
+  if(!name&&!S.canEdit) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),
+    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'We couldn’t find you on the roster'),h('p',{class:'muted'},'You’re signed in as ',h('b',null,(typeof FB!=='undefined'&&FB.user&&FB.user.email)||''),'. Ask squadron staff to type your roster name next to your email on the Access tab, then refresh.')));
   if(!name) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),
-    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Who are you?'),h('p',{class:'muted'},'Pick your name once. This page then shows paperwork headed your way, your to-dos, taskers and duty days. Only you can see your to-dos.'),
+    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Who are you?'),h('p',{class:'muted'},'Staff: your email didn’t match the roster. Pick your name once (or set it on the Access tab). This page then shows paperwork headed your way, your to-dos, taskers and duty days. Only you can see your to-dos.'),
       h('div',{class:'stack',style:'gap:10px;text-align:left'},h('label',{class:'f'},'Your name',h('input',{type:'text',id:'mepick',list:'menames',value:st.pick,oninput:e=>st.pick=e.target.value}),nameDatalist('menames')),
         h('button',{class:'btn pri',onclick:async()=>{ const p=allPeople().find(x=>norm(x.name)===norm(st.pick)); if(!p) return toast('Pick your name from the list.'); try{ await S.db.doc(`data/users/${S.uid}/profile`).set({name:p.name}); }catch(e){ toast(e&&e.code==='invalid_argument'?'Your access level can’t save a personal page. Ask the Chief of Staff for Contributor or Editor access.':'That didn’t save. Try again.'); } }},'This is me'))));
-  const me=allPeople().find(p=>norm(p.name)===norm(name))||{name,rank:'',pos:''};
+  const me=(typeof identify==='function'&&identify())||allPeople().filter(p=>norm(p.name)===norm(name)).sort((a,b)=>!!(b.pos||'').trim()-!!(a.pos||'').trim())[0]||{name,rank:'',pos:''};
   const t=today();
   const incoming=(S.headsup||[]).filter(x=>x.routing.some(n=>sameName(n,name))).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
   const pending=incoming.filter(x=>!Object.keys(x.signed||{}).some(n=>sameName(n,name)));
@@ -1521,7 +1590,7 @@ VIEWS.me=function(){
   const meCol=`data/users/${S.uid}`;
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
-    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
+    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
     h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'To sign'),h('div',{class:'v'},String(pending.length))),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
     h('div',{class:'grid2'},
       h('div',{class:'panel'},h('h3',null,'Paperwork headed your way'),h('p',{class:'small muted',style:'margin-top:-4px'},'eSSSs and OCONUS packages where you’re in the approval chain. The signing still happens in Teams; mark it here when you’re done.'),
@@ -1549,7 +1618,7 @@ VIEWS.me=function(){
 </script>
 <script>
 /* ================= SQUADRON STAFF (locked) ================= */
-const SQ_ROLES=[['taskers','Taskers','—'],['recall','Recall Roster','—'],['exec','Exec','Squadron Executive'],['shirt','First Sergeant','Squadron First Sergeant'],['cc','Squadron Commander','Squadron Commander'],['cos','Chief of Staff','Squadron Chief of Staff'],['supt','Staff Supt','Squadron Staff Superintendent'],['sel','SEL','Squadron Senior Enlisted Leader']];
+const SQ_ROLES=[['taskers','Taskers','—'],['exec','Exec','Squadron Executive'],['shirt','First Sergeant','Squadron First Sergeant'],['cc','Squadron Commander','Squadron Commander'],['cos','Chief of Staff','Squadron Chief of Staff'],['supt','Staff Supt','Squadron Staff Superintendent'],['sel','SEL','Squadron Senior Enlisted Leader']];
 function cmdStaffPerson(name){ if(!name) return null; const r=D('roster/main'); if(!r) return null; const sec=r.sections.find(s=>/Command Staff/.test(s.name)); return sec?sec.people.find(p=>sameName(p.name,name)):null; }
 const daysTo=d=>d?Math.round((new Date(d+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
 const ageDays=iso=>iso?Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/864e5)):0;
@@ -1567,7 +1636,8 @@ VIEWS.sqstaff=function(){
   if(!S.isOwner&&!person) return lockMsg('Squadron staff only',me?`${me} isn’t listed under Squadron Command Staff on the roster.`:'Pick your name on the My Squadron tab first. This tab opens for the people listed under Squadron Command Staff.');
   const mine=person?(SQ_ROLES.find(r=>new RegExp('^'+r[2]+'$').test((person.pos||'').trim()))||[])[0]:null;
   const [cur,segEl]=seg('sqrole',SQ_ROLES.map(r=>[r[0],r[1]]),mine||'exec');
-  const body={recall:()=>VIEWS.logistics(),taskers:()=>VIEWS.taskers(),exec:sqExec,shirt:sqShirt,cc:sqCC,cos:sqCoS,supt:sqSupt,sel:sqSel}[cur]();
+  if(S.sub.sqrole==='recall') S.sub.sqrole='taskers';
+  const body={taskers:()=>VIEWS.taskers(),exec:sqExec,shirt:sqShirt,cc:sqCC,cos:sqCoS,supt:sqSupt,sel:sqSel}[cur]();
   return h('div',{class:'stack'},head('Squadron Staff',`${person?person.rank+' '+person.name+' · ':''}Locked to squadron command staff.`,segEl),body);
 };
 
@@ -2214,6 +2284,7 @@ VIEWS.access=function(){
   const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('Only staff can do that.'); } };
   const remove=async e=>{ try{ await FB.fs.doc('members/'+e).delete(); toast('Removed'); }catch(x){ toast('Only staff can do that.'); } };
   return h('div',{class:'stack'},head('Access','Who can sign in to the squadron hub. Staff get edit rights and the locked tabs.'),
+    h('div',{class:'banner info small'},'The site works out who someone is from their sign-in email (for example c27first.last@afacademy.af.edu → First Last on the roster). If it can’t tell, or they sign in with another email, type their roster name in the Name column.'),
     h('div',{class:'grid2'},
       h('div',{class:'panel'},h('h3',null,'Requests ',reqs.length?h('span',{class:'chip Sent'},String(reqs.length)):null),
         reqs.length?h('ul',{class:'list'},reqs.map(r=>h('li',null,h('div',{class:'grow'},h('b',null,r.name||'(no name)'),h('div',{class:'small muted mono'},r.id)),
@@ -2228,7 +2299,7 @@ VIEWS.access=function(){
         h('button',{class:'btn pri',style:'margin-top:8px',onclick:()=>{ approve(st.email,st.role,st.name); st.email=''; st.name=''; }},'Add')),
       h('div',{class:'panel'},h('h3',null,`Members (${mems.length})`),
         mems.length?h('div',{class:'tw',style:'max-height:60vh'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Email'),h('th',null,'Name'),h('th',null,'Access'),h('th',null,''))),
-          h('tbody',null,mems.map(m=>h('tr',null,h('td',{class:'small mono',style:'overflow-wrap:anywhere'},m.id),h('td',{class:'small'},m.name||''),
+          h('tbody',null,mems.map(m=>h('tr',null,h('td',{class:'small mono',style:'overflow-wrap:anywhere'},m.id),h('td',null,h('input',{type:'text','aria-label':'Roster name for '+m.id,value:m.name||'',placeholder:'Name as on the roster',style:'min-width:150px;padding:3px 6px',onchange:e=>FB.fs.doc('members/'+m.id).set({name:e.target.value.trim()},{merge:true}).then(()=>toast('Name saved')).catch(()=>toast('Only staff can do that.'))})),
             h('td',null,h('select',{'aria-label':'Access for '+m.id,onchange:e=>FB.fs.doc('members/'+m.id).set({role:e.target.value},{merge:true}).catch(()=>toast('Only staff can do that.'))},['member','staff'].map(o=>{ const op=h('option',{value:o},o); if(m.role===o) op.selected=true; return op; }))),
             h('td',null,m.id===OWNER?h('span',{class:'small muted'},'owner'):confirmBtn('Remove',()=>remove(m.id)))))))):h('p',{class:'muted'},'No members yet. Approve requests or add people on the left.'))),
     S.isOwner?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'One-time move from the Claude version. Pick the cs12-data-import.json file (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced.'),
@@ -2296,6 +2367,17 @@ boot=async function(){
   });
 };
 const FULL_TABS=TABS.slice();
+/* ---------- who is signed in: match the sign-in email (c27first.last@...) or the Access-list name to the roster ---------- */
+function emailToName(em){ return (em||'').split('@')[0].toLowerCase().replace(/^c\d{2}/,'').split(/[._]+/).map(x=>x.replace(/\d+$/,'')).filter(Boolean).join(' '); }
+function identify(){
+  if(!FB.user) return null; const people=allPeople(); if(!people.length) return null;
+  const key=n=>norm(stripCls(n)).replace(/[^a-z ]/g,'');
+  // the same person can be listed in several sections (flight + staff job); pick their entry with a job title
+  const one=list=>{ const names=new Set(list.map(x=>key(x.name))); if(names.size!==1) return null; return list.find(x=>(x.pos||'').trim())||list[0]; };
+  const tryName=n=>{ if(!n) return null; const k=key(n); if(!k) return null; return one(people.filter(x=>key(x.name)===k))||one(people.filter(x=>sameName(x.name,n))); };
+  return tryName(FB.member&&FB.member.name)||tryName(emailToName(FB.user.email));
+}
+myName=function(){ const p=identify(); if(p) return p.name; if(S.canEdit){ const pr=(S.mine||[]).find(d=>d.id==='profile'); return pr&&pr.name||''; } return ''; };
 const _sendHeadsUp=sendHeadsUp, _saveMyDraft=saveMyDraft, _sendDiscipline=sendDiscipline;
 const _renderTabs0=renderTabs;
 renderTabs=function(){ _renderTabs0();
@@ -2309,7 +2391,7 @@ renderTabs=function(){ _renderTabs0();
 <script>
 (function(){
   const sub=ls('sub'); if(sub) S.sub=sub;
-  let hash=(location.hash||'').slice(1); if(hash==='oconus'){ hash='builder'; S.sub.doc='oconus'; } if(hash==='taskers'){ hash='sqstaff'; S.sub.sqrole='taskers'; } if(hash==='logistics'){ hash='sqstaff'; S.sub.sqrole='recall'; } const t=TABS.some(x=>x[0]===hash)?hash:(ls('tab')||'home');
+  let hash=(location.hash||'').slice(1); if(hash==='oconus'){ hash='builder'; S.sub.doc='oconus'; } if(hash==='taskers'){ hash='sqstaff'; S.sub.sqrole='taskers'; } if(hash==='logistics'){ hash='sqstaff'; S.sub.sqrole='taskers'; } if(hash==='staffs') hash='roster'; if(S.sub.duty==='allcall') S.sub.duty='sdo'; const t=TABS.some(x=>x[0]===hash)?hash:(ls('tab')||'home');
   S.tab=TABS.some(x=>x[0]===t)?t:'home';
   boot();
 })();
