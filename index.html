@@ -83,6 +83,19 @@ h4{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;c
 .btn:hover{background:var(--sunk)}
 .btn.pri{background:var(--sky);border-color:var(--sky);color:#fff}
 .btn.pri:hover{filter:brightness(1.07)}
+.myweek{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.mwday{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.mwday.today{border:2px solid var(--sun);box-shadow:0 0 0 2px var(--sun-soft)}
+.mwday.past{opacity:.55}
+.mwh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.mwl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mwl li{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.35}
+.mwl li .chip{flex:none;font-size:10.5px}
+.mwt{white-space:pre-line;min-width:0;overflow-wrap:anywhere}
+.mwrole{color:var(--coral)}
+.mwedit{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.mwedit textarea{font-size:12.5px}
+@media (max-width:640px){.mwday.past{display:none}}
 .linkbtn{background:none;border:0;padding:2px;color:var(--sky);text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
 .btn.sun{background:var(--sun);border-color:var(--sun);color:var(--on-accent)}
 .btn.danger{color:var(--coral)}
@@ -276,7 +289,7 @@ const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 
 /* ---------- app state ---------- */
 const S={docs:{}, photos:[], dirt:[], actions:[], ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
-const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','a46/vault','staff/a46import'];
+const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','week/astaff','a46/vault','staff/a46import'];
 const D=p=>{ const v=S.docs[p]; const o=S.overlay&&S.overlay[p]; return (v&&o)?o(v):v; };
 /* ---------- data shape guard ----------
    Every record is repaired to the shape the tabs expect as it loads, so a half-saved record,
@@ -300,6 +313,7 @@ const SHAPES={
   'grids/lockers':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'grids/rooming':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'grids/coc':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
+  'week/astaff':{weekly:{__map__:['']}},
   'a46/vault':null,'staff/a46import':null
 };
 const COL_SHAPES={
@@ -1664,6 +1678,7 @@ VIEWS.me=function(){
   return h('div',{class:'stack'},
     head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
     h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'To sign'),h('div',{class:'v'},String(pending.length))),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
+    myWeekPanel(name),
     h('div',{class:'grid2'},
       h('div',{class:'panel'},h('h3',null,'Paperwork headed your way'),h('p',{class:'small muted',style:'margin-top:-4px'},'eSSSs and OCONUS packages where you’re in the approval chain. The signing still happens in Teams; mark it here when you’re done.'),
         incoming.length?h('ul',{class:'list'},incoming.slice(0,15).map(x=>{ const done=Object.keys(x.signed||{}).some(n=>sameName(n,name)); const idx=x.routing.findIndex(n=>sameName(n,name)); const before=x.routing.slice(0,idx).filter(n=>!Object.keys(x.signed||{}).some(s=>sameName(s,n)));
@@ -1862,11 +1877,98 @@ function sqCoS(){
   const hs=(S.headsup||[]).filter(x=>(x.status||'Active')==='Active'&&nextSigner(x)); const g=coverageGaps(7); const ts=taskerStatus();
   return h('div',{class:'stack'},
     leaderTaskPanel(['div'],'cos'),
+    astaffEditor(),
     h('div',{class:'kpis'},kpi('Open staff action items',String(acts.length)),kpi('Overdue items',String(acts.filter(a=>a.due&&a.due<t).length),null,acts.some(a=>a.due&&a.due<t)),kpi('Active paperwork',String(hs.length)),kpi('Dozen Daily schedule',age==null?'Not updated':age===0?'Today':age+'d old',site&&site.outlook&&site.outlook.updatedBy?'by '+site.outlook.updatedBy:null,age==null||age>6),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('Taskers missed',String(ts.filter(x=>x.state==='overdue').length),null,ts.some(x=>x.state==='overdue'))),
     h('div',{class:'panel'},h('h3',null,'Staff action items'),
       Object.keys(byStaff).length?h('div',{class:'cols4'},Object.entries(byStaff).map(([st,list])=>h('div',null,h('h4',null,st),h('ul',{class:'list'},list.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).map(a=>h('li',null,h('div',{class:'grow small'},a.title,h('div',{class:'muted'},[a.owner,a.due?'due '+fmtShort(a.due):''].filter(Boolean).join(' · '))),a.due&&a.due<t?h('span',{class:'chip Returned'},'Overdue'):null)))))):h('p',{class:'muted'},'No open action items on the Staffs tab.')),
     paperworkTimeline(S.headsup||[],{title:'All active paperwork'})
   );
+}
+</script>
+<script>
+/* ================= MY WEEK (personal weekly outlook) =================
+   Built from the Dozen Daily weekly outlook (All, Step Brief, class rows, MISC) plus the dated A-staff preflight schedule,
+   filtered to the signed-in person's class, flight and staff division. */
+// A-staff preflight: the same every week (Tue–Fri). Staff can change it on Sq Staff → Chief of Staff; this is the starting pattern.
+const ASTAFF_DEFAULT={2:['(A1) AOR Readiness','(A3) Staff Sync (0640-0700)'],3:['(A2) AOR Readiness','(A4/6) Staff Sync (0640-0700)','(Stan/Eval) C4C room inspections','(C&H) Attend C4C Step Briefs'],4:['(A3) AOR Readiness','(A1) Staff Sync (0640-0700)'],5:['(A4/6) AOR Readiness','(A2) Staff Sync (0640-0700)','(Stan/Eval) C4C room inspections','(C&H) Attend C4C Step Briefs']};
+function astaffWeekly(){ const d=D('week/astaff'); const w=d&&d.weekly; return (w&&Object.keys(w).length)?w:ASTAFF_DEFAULT; }
+const MON_IDX={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function sundayOf(d){ const x=new Date(d); x.setHours(12,0,0,0); x.setDate(x.getDate()-x.getDay()); return x; }
+// the outlook title reads like "Weekly Outlook: 18 October - 24 October"; work out the real dates for its 7 columns
+function outlookDates(o){
+  let start=null; const m=/(\d{1,2})\s+([A-Za-z]{3,})/.exec((o&&o.title)||'');
+  if(m&&MON_IDX[m[2].slice(0,3).toLowerCase()]!==undefined){
+    const now=new Date(); let d=new Date(now.getFullYear(),MON_IDX[m[2].slice(0,3).toLowerCase()],+m[1],12);
+    const diff=(d-now)/864e5; if(diff>180) d.setFullYear(d.getFullYear()-1); if(diff<-180) d.setFullYear(d.getFullYear()+1);
+    if(!isNaN(d)) start=sundayOf(d);
+  }
+  if(!start) start=sundayOf(new Date());
+  return [...Array(7)].map((_,i)=>{ const d=new Date(start); d.setDate(start.getDate()+i); return iso(d); });
+}
+const DIV_NAMES={a1:'A1',a2:'A2',a3:'A3','a4/6':'A4/6','stan/eval':'Stan/Eval','c&h':'C&H'};
+function divKey(s){ s=String(s||'').toLowerCase().replace(/\s+/g,''); if(/^a4\/?a?6$/.test(s)) return 'a4/6'; if(/stan|eval/.test(s)) return 'stan/eval'; if(/^c&h$|character|honor/.test(s)) return 'c&h'; return s; }
+// who am I in squadron terms: class year, flight, divisions, command staff?
+function myProfile(name){
+  const ents=allPeople().filter(p=>sameName(p.name,name)); const out={year:'',flight:'',divs:new Set(),cmd:false,cls:''};
+  ents.forEach(p=>{
+    if(!out.year&&classOf(p)){ out.year=classOf(p); out.cls=p.cls; }
+    const f=((p.flight||'')+' '+(p.section||'')).match(/Alpha|Bravo|Charlie/); if(f&&!out.flight) out.flight=f[0];
+    const pos=p.pos||'', sec=p.section||'';
+    if(/Command Staff/.test(sec)) out.cmd=true;
+    if(/Squadron A-Staff/.test(sec)||/^Squadron A[1-4]/.test(pos)){ const a=pos.match(/A4\/A6|A4\/6|A[1-3]/); if(a) out.divs.add(divKey(a[0])); }
+    if(/Stan\/Eval/.test(sec)||/Standardization/.test(pos)) out.divs.add('stan/eval');
+    if(/Character and Honor/.test(pos)) out.divs.add('c&h');
+  });
+  return out;
+}
+const lines=c=>String(c||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+function stepRole(line,flight){
+  if(/all[- ]?call|squadron/i.test(line)) return 'Everyone';
+  if(!flight) return '';
+  const re=new RegExp(flight+'\\s*\\((lead|support)\\)','i'); const m=re.exec(line); if(m) return /lead/i.test(m[1])?`${flight} leads`:`${flight} supports`;
+  return new RegExp(flight,'i').test(line)?flight:'';
+}
+function mentionsMyClass(line,prof){ if(/all classes/i.test(line)) return true; if(!prof.year) return false; return line.includes(prof.cls)||line.includes(prof.year)||line.includes("’"+prof.year.slice(2))||line.includes("'"+prof.year.slice(2)); }
+function myWeekPanel(name){
+  const site=D('config/site'); const o=site&&site.outlook; if(!o||!o.rows||!o.rows.length) return null;
+  const prof=myProfile(name); const dates=outlookDates(o); const t=today();
+  const row=re=>o.rows.find(r=>re.test((r.label||'').trim()));
+  const allR=row(/^(all|mando|mandatory)/i), stepR=row(/step/i), miscR=row(/misc/i), clsR=prof.year?o.rows.find(r=>(r.label||'').trim()===prof.year):null;
+  const weekly=astaffWeekly();
+  const showAll=prof.cmd||S.isOwner;
+  const days=dates.map((d,i)=>{
+    const items=[];
+    lines(allR&&allR.cells[i]).forEach(x=>items.push({k:'mando',t:x}));
+    lines(clsR&&clsR.cells[i]).forEach(x=>items.push({k:'cls',t:x}));
+    lines(miscR&&miscR.cells[i]).filter(x=>mentionsMyClass(x,prof)).forEach(x=>items.push({k:'cls',t:x}));
+    const sb=lines(stepR&&stepR.cells[i]); sb.forEach(x=>items.push({k:'step',t:x,role:stepRole(x,prof.flight)}));
+    (weekly[new Date(d+'T12:00').getDay()]||[]).forEach(x=>{ const m=/^\(([^)]+)\)\s*(.*)$/.exec(x); const dk=m?divKey(m[1]):''; if(showAll||prof.divs.has(dk)) items.push({k:'staff',t:m?m[2]:x,tag:m?(DIV_NAMES[dk]||m[1]):''}); });
+    return {d,label:(o.days[i]||'').trim(),items};
+  });
+  const chip={mando:['Mandatory','Approved'],cls:[prof.year?"Class of ’"+prof.year.slice(2):'Class','Sent'],step:['Step brief','Returned'],staff:['A-staff','Draft']};
+  const who=[prof.year?"’"+prof.year.slice(2):null,prof.flight?prof.flight+' Flight':null,...[...prof.divs].map(k=>DIV_NAMES[k]||k)].filter(Boolean).join(' · ');
+  return h('div',{class:'panel'},
+    h('div',{class:'row'},h('h3',{style:'margin:0'},'My week'),h('span',{class:'small muted'},o.title||''),h('span',{class:'spacer'}),h('span',{class:'small muted'},who?'Showing: '+who:'')),
+    h('p',{class:'small muted',style:'margin:4px 0 10px'},'Mandatory events, your class’s events, the step brief schedule and your A-staff preflight items. The full outlook is on the Dozen Daily.'),
+    h('div',{class:'myweek'},days.map(day=>h('div',{class:'mwday'+(day.d===t?' today':'')+(day.d<t?' past':'')},
+      h('div',{class:'mwh'},h('b',null,day.label||new Date(day.d+'T12:00').toLocaleDateString('en-US',{weekday:'long'})),h('span',{class:'mono small'},fmtShort(day.d))),
+      day.items.length?h('ul',{class:'mwl'},day.items.map(it=>h('li',{class:'mw-'+it.k+(it.k==='step'&&it.role&&it.role!=='Everyone'&&!/leads|supports/.test(it.role)?'':'')},
+        h('span',{class:'chip '+chip[it.k][1]},it.k==='staff'&&it.tag?it.tag:chip[it.k][0]),
+        h('span',{class:'mwt'},it.t,it.k==='step'&&it.role?h('b',{class:'mwrole'},' · '+it.role):null)))):h('p',{class:'small muted',style:'margin:4px 0 0'},'Nothing scheduled.')))));
+}
+
+/* ---------- A-staff preflight schedule editor (Sq Staff → Chief of Staff): one weekly pattern ---------- */
+const WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function astaffEditor(){
+  const st=S.edit.ast||(S.edit.ast={draft:null}); const w=astaffWeekly();
+  if(!st.draft) st.draft=WD.map((_,i)=>(w[i]||[]).join('\n'));
+  const save=()=>mutDoc('week/astaff',b=>{ const weekly={}; st.draft.forEach((c,i)=>{ const ls=lines(c).map(x=>x.slice(0,160)).slice(0,30); if(ls.length) weekly[i]=ls; }); b.weekly=weekly; return b; }).then(ok=>{ if(ok){ toast('A-staff schedule saved'); st.draft=null; render(); } });
+  const cols=[1,2,3,4,5]; // Monday–Friday shown; the schedule normally runs Tuesday–Friday
+  return h('div',{class:'panel'},h('h3',{style:'margin:0'},'A-staff preflight schedule'),
+    h('p',{class:'small muted',style:'margin:4px 0 10px'},'The same every week. One item per line, starting with the division in parentheses, e.g. (A1) AOR Readiness. Each person sees only their division’s items on My Squadron; command staff see them all. Flights and step briefs come from the weekly outlook the Exec updates.'),
+    h('div',{class:'mwedit'},cols.map(i=>h('label',{class:'f'},h('span',null,WD[i]),
+      h('textarea',{id:'ast'+i,rows:5,value:st.draft[i],oninput:e=>{ st.draft[i]=e.target.value; }},st.draft[i])))),
+    h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn pri',onclick:save},'Save schedule'),h('button',{class:'btn',onclick:()=>{ st.draft=WD.map((_,i)=>(ASTAFF_DEFAULT[i]||[]).join('\n')); render(); }},'Reset to the standard pattern')));
 }
 </script>
 <script>
