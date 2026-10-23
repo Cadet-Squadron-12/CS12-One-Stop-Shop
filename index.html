@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss: data: blob:; frame-src https://*.firebaseapp.com https://accounts.google.com https://apis.google.com https://*.google.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<style id="antiframe">html{display:none}</style>
+<script>/* refuse to run inside another site's frame (stops click-jacking) */ if(window.top===window.self){document.getElementById('antiframe').remove();}else{try{window.top.location=window.self.location;}catch(e){}}</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="icon" href="logo.png">
 <meta name="description" content="Cadet Squadron 12 hub: Dozen Daily, duty schedules, taskers, paperwork builder and A4/6 tools.">
@@ -28,12 +32,19 @@
   --body:"Public Sans", "Segoe UI", system-ui, sans-serif;
   --mono:"IBM Plex Mono", ui-monospace, Menlo, monospace;
   --r:12px;
+  /* class colors: '27 yellow, '28 blue, '29 grey, '30 red (they cycle every 4 years: '31 is yellow again) */
+  /* taken from the CS-12 patch: runway yellow, patch blue, flight-line grey, runway red */
+  --y3:#F5C518; --y3-ink:#10141B; --y3-soft:#FDF2C4;
+  --y0:#6F96CD; --y0-ink:#0E1116; --y0-soft:#E1ECF8;
+  --y1:#A8B4C0; --y1-ink:#0E1116; --y1-soft:#EDF0F3;
+  --y2:#D62828; --y2-ink:#FFFFFF; --y2-soft:#FBE0E0;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0B0E13; --surface:#141920; --sunk:#1C232D; --line:#2A3441;
   --ink:#EEF2F8; --muted:#A3AFC0; --navy:#06080B; --sky:#7FA8E0;
   --sun-soft:#3A3110; --coral-soft:#3F1B1B; --sky-soft:#18273D; --mint-soft:#11352A; --grape-soft:#2C2457;
-  color-scheme:dark }}
+  color-scheme:dark 
+  --y3:#F5C518; --y3-soft:#3A3110; --y0:#9DC1E6; --y0-soft:#1B2A3E; --y1:#A8B4C0; --y1-soft:#262B33; --y2:#E5484D; --y2-soft:#3B1718;}}
 :root[data-theme="dark"]{
   --bg:#0B0E13; --surface:#141920; --sunk:#1C232D; --line:#2A3441;
   --ink:#EEF2F8; --muted:#A3AFC0; --navy:#06080B; --sky:#7FA8E0;
@@ -96,6 +107,15 @@ h4{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;c
 .mwedit{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
 .mwedit textarea{font-size:12.5px}
 @media (max-width:640px){.mwday.past{display:none}}
+.ctag{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:700;font-size:11.5px;line-height:1.5;white-space:nowrap;letter-spacing:.02em}
+.ctag.y0{background:var(--y0);color:var(--y0-ink)} .ctag.y1{background:var(--y1);color:var(--y1-ink)} .ctag.y2{background:var(--y2);color:var(--y2-ink)} .ctag.y3{background:var(--y3);color:var(--y3-ink)}
+.cdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px;flex:none}
+.cdot.y0{background:var(--y0)} .cdot.y1{background:var(--y1)} .cdot.y2{background:var(--y2)} .cdot.y3{background:var(--y3)}
+tr.y0>td:first-child{box-shadow:inset 4px 0 0 var(--y0)} tr.y1>td:first-child{box-shadow:inset 4px 0 0 var(--y1)} tr.y2>td:first-child{box-shadow:inset 4px 0 0 var(--y2)} tr.y3>td:first-child{box-shadow:inset 4px 0 0 var(--y3)}
+.week .rl.y0{background:var(--y0);color:var(--y0-ink)} .week .rl.y1{background:var(--y1);color:var(--y1-ink)} .week .rl.y2{background:var(--y2);color:var(--y2-ink)} .week .rl.y3{background:var(--y3);color:var(--y3-ink)}
+.week .yc.y0{background:var(--y0-soft)} .week .yc.y1{background:var(--y1-soft)} .week .yc.y2{background:var(--y2-soft)} .week .yc.y3{background:var(--y3-soft)}
+.mwl li.ycls{border-left:3px solid var(--line);padding-left:6px} .mwl li.ycls.y0{border-color:var(--y0)} .mwl li.ycls.y1{border-color:var(--y1)} .mwl li.ycls.y2{border-color:var(--y2)} .mwl li.ycls.y3{border-color:var(--y3)}
+.clegend{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .linkbtn{background:none;border:0;padding:2px;color:var(--sky);text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
 .btn.sun{background:var(--sun);border-color:var(--sun);color:var(--on-accent)}
 .btn.danger{color:var(--coral)}
@@ -154,8 +174,8 @@ button.st{cursor:pointer}
 .cqgrid .h{background:var(--navy);color:#fff;font-weight:700}
 .cqgrid .tm{background:var(--sunk);font-family:var(--mono);font-size:11.5px}
 .slot{cursor:pointer;justify-content:space-between}
-.slot.k28{background:var(--sky-soft)}
-.slot.k29{background:var(--surface)}
+.slot.k28{background:var(--y0-soft);box-shadow:inset 3px 0 0 var(--y0)}
+.slot.k29{background:var(--y1-soft);box-shadow:inset 3px 0 0 var(--y1)}
 .slot.kx{background:repeating-linear-gradient(45deg,var(--coral-soft),var(--coral-soft) 6px,transparent 6px,transparent 12px);cursor:not-allowed}
 .slot.vac{color:var(--muted);font-style:italic}
 .slot input{padding:2px 5px;font-size:12px}
@@ -266,7 +286,7 @@ function clickGuard(fn){ return function(e){ const el=e.currentTarget; if(el&&el
   if(r&&typeof r.then==='function'&&el&&el.tagName==='BUTTON'){ el.dataset.busy='1'; el.setAttribute('aria-busy','true'); el.disabled=true;
     r.catch(err=>{ console.error(err); toast('Something went wrong. Try again.'); }).finally(()=>{ delete el.dataset.busy; el.removeAttribute('aria-busy'); el.disabled=false; }); } }; }
 // only web, email and phone links (and our own pictures) can be opened from stored data
-function safeUrl(u,allowImg){ u=String(u||'').trim(); if(/^(https?:\/\/|mailto:|tel:)/i.test(u)) return u; if(allowImg&&/^data:image\/(jpeg|png|webp|gif);/i.test(u)) return u; return '#'; }
+function safeUrl(u,allowImg){ u=String(u||'').trim(); if(/^(https?:\/\/|mailto:|tel:)/i.test(u)) return u; if(allowImg&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(u)) return u; return '#'; }
 let _lastErrToast=0;
 function softError(msg){ const n=Date.now(); if(n-_lastErrToast>8000){ _lastErrToast=n; try{ toast(msg); }catch(e){} } }
 window.addEventListener('error',e=>{ console.error(e.error||e.message); });
@@ -285,6 +305,15 @@ const today=()=>iso(new Date());
 const money=n=>'$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
 function workdaysBetween(fromIso,toIso){ let d=new Date(fromIso+'T12:00'),e=new Date(toIso+'T12:00'),n=0; if(e<=d) return 0; while(d<e){ d.setDate(d.getDate()+1); const w=d.getDay(); if(w&&w<6) n++; } return n; }
+/* class years and colors: C1C..C4C roll over each June; colors follow the class year ('27 yellow, '28 blue, '29 grey, '30 red, then repeat) */
+function clsToYear(cls){ const n={C1C:1,C2C:2,C3C:3,C4C:4}[String(cls||'').toUpperCase().replace(/\s/g,'')]; if(!n) return ''; const d=new Date(); const firstie=d.getMonth()>=5?d.getFullYear()+1:d.getFullYear(); return String(firstie+n-1); }
+function yearOf(x){ x=String(x||'').trim(); const y=clsToYear(x); if(y) return y; const m=x.match(/(?:^|\D)(20\d\d)(?:\D|$)/); if(m) return m[1]; const s=x.match(/^[’'](\d\d)$/); return s?'20'+s[1]:''; }
+const ycls=y=>y?'y'+(+y%4):'';
+function clsTag(x,label){ const y=yearOf(x); if(!y) return x?h('span',null,x):null; return h('span',{class:'ctag '+ycls(y),title:'Class of '+y},label||(/^C\dC$/i.test(String(x).trim())?String(x).toUpperCase():"’"+y.slice(2))); }
+function personYear(name){ const p=allPeople().find(x=>sameNameLoose(x.name,name)&&x.cls); return p?yearOf(p.cls):''; }
+function sameNameLoose(a,b){ a=norm(a); b=norm(b); return !!a&&!!b&&(a===b||(a.split(' ').pop()===b.split(' ').pop()&&a[0]===b[0])); }
+function nameDot(name){ const y=personYear(name); return y?h('span',{class:'cdot '+ycls(y),title:'Class of '+y}):null; }
+function classLegend(){ const d=new Date(); const f=d.getMonth()>=5?d.getFullYear()+1:d.getFullYear(); return h('span',{class:'clegend'},[0,1,2,3].map(i=>clsTag(String(f+i)))); }
 const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 
 /* ---------- app state ---------- */
@@ -427,8 +456,8 @@ function outlookBlock(){
     h('div',{class:'dh'},''),
     (ed?draft.days:o.days).map((d,i)=>h('div',{class:'dh'+(!ed&&d.startsWith(todayName)?' today':'')}, ed?h('input',{type:'text',id:'od'+i,value:d,oninput:e=>draft.days[i]=e.target.value}):d)),
     (ed?draft.rows:o.rows).map((r,ri)=>[
-      h('div',{class:'rl'}, ed?h('input',{type:'text',id:'orl'+ri,value:r.label,oninput:e=>r.label=e.target.value}):r.label),
-      r.cells.map((c,ci)=>h('div',null, ed?h('textarea',{id:`oc${ri}_${ci}`,oninput:e=>r.cells[ci]=e.target.value},c):c))
+      h('div',{class:'rl '+(/^20\d\d$/.test((r.label||'').trim())?ycls(r.label.trim()):'')}, ed?h('input',{type:'text',id:'orl'+ri,value:r.label,oninput:e=>r.label=e.target.value}):(/^20\d\d$/.test((r.label||'').trim())?'Class of ’'+r.label.trim().slice(2):r.label)),
+      r.cells.map((c,ci)=>h('div',{class:/^20\d\d$/.test((r.label||'').trim())?'yc '+ycls(r.label.trim()):null}, ed?h('textarea',{id:`oc${ri}_${ci}`,oninput:e=>r.cells[ci]=e.target.value},c):c))
     ])
   );
   return [
@@ -458,15 +487,15 @@ VIEWS.home=function(){
     h('div',{class:'grid3'},
       h('div',{class:'panel'},h('h4',null,'Squadron Duty Officer'),
         sdoNote?h('div',{class:'stamp'},sdoNote):null,
-        h('div',{class:'big-name'},sdoName||'Not scheduled'),
+        h('div',{class:'big-name'},sdoName?nameDot(sdoName):null,sdoName||'Not scheduled'),
         sdoName&&S.canEdit&&contactFor(sdoName)?h('div',{class:'mono small'},contactFor(sdoName).phone):null,
         h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{S.sub.duty='sdo';go('duty')}},'SDO schedule')),
       h('div',{class:'panel'},h('h4',null,cq&&cq.label?`CQ sitters · ${cq.label}`:'CQ sitters tonight'),
-        cq&&cq.shifts.length? h('ul',{class:'list'},cq.shifts.map(x=>h('li',null,h('span',{class:'mono small',style:'width:86px;flex:none'},x.time),h('span',{class:'grow',style:x.name?'font-weight:600':'color:var(--muted);font-style:italic'},x.name||'open')))) : h('p',{class:'muted'},'No CQ shifts tonight.'),
+        cq&&cq.shifts.length? h('ul',{class:'list'},cq.shifts.map(x=>h('li',null,h('span',{class:'mono small',style:'width:86px;flex:none'},x.time),h('span',{class:'grow',style:x.name?'font-weight:600':'color:var(--muted);font-style:italic'},x.name?nameDot(x.name):null,x.name||'open')))) : h('p',{class:'muted'},'No CQ shifts tonight.'),
         h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{S.sub.duty='cq';go('duty')}},'CQ sign-up')),
       h('div',{class:'panel'},h('h4',null,'Birthdays'),
         bdToday.length?h('div',{class:'big-name',style:'font-size:19px'},'🎂 ',bdToday.map(b=>b.name).join(' & ')):null,
-        upcoming.filter(b=>b.md!==md).length? h('ul',{class:'list'},upcoming.filter(b=>b.md!==md).map(b=>h('li',null,h('span',{class:'mono small',style:'width:52px'},fmtShort(new Date().getFullYear()+'-'+b.md).slice(0,6)),h('span',{class:'grow'},b.name)))) : (bdToday.length?null:h('p',{class:'muted'},'No birthdays in the next week.')))
+        upcoming.filter(b=>b.md!==md).length? h('ul',{class:'list'},upcoming.filter(b=>b.md!==md).map(b=>h('li',null,h('span',{class:'mono small',style:'width:52px'},fmtShort(new Date().getFullYear()+'-'+b.md).slice(0,6)),h('span',{class:'grow'},nameDot(b.name),b.name)))) : (bdToday.length?null:h('p',{class:'muted'},'No birthdays in the next week.')))
     ),
     ...outlookBlock()
   );
@@ -508,7 +537,7 @@ VIEWS.taskers=function(){
     const ppl=g.people.filter(p=>(!q||norm(p.name).includes(q)) && (flt==='all'||tk.columns.some(c=>{const v=(tk.status[p.id]||{})[c.id]; return v&&!/^yes/i.test(v);})));
     if(!ppl.length) return;
     rows.push(h('tr',{class:'grp'},h('td',{colspan:tk.columns.length+2},g.name)));
-    ppl.forEach(p=>rows.push(h('tr',null,h('td',{class:'muted small',style:'white-space:nowrap'},p.rank),h('td',{style:'white-space:nowrap;font-weight:600'},p.name),tk.columns.map(c=>cell(p,c)))));
+    ppl.forEach(p=>rows.push(h('tr',{class:ycls(tkClassOf(p))||null},h('td',{class:'muted small',style:'white-space:nowrap'},p.rank),h('td',{style:'white-space:nowrap;font-weight:600'},p.name),tk.columns.map(c=>cell(p,c)))));
   });
   const nc=S.edit.newCol||(S.edit.newCol={label:'',due:'',classes:['2027','2028','2029','2030']});
   return h('div',{class:'stack'},
@@ -625,7 +654,7 @@ function cqView(){
   return h('div',{class:'stack'},
     h('div',{class:'row'},h('div',{class:'seg'},months.map(mm=>h('button',{type:'button','aria-pressed':String(mm===mon),onclick:()=>{S.sub.cqMonth=mm;render()}},mm))),h('span',{class:'spacer'}),
       canW?h('label',{class:'f',style:'flex-direction:row;align-items:center;gap:6px'},'Fill as',h('input',{type:'text',id:'cqme',list:'cqnames',style:'width:200px',value:meName,placeholder:'Your name',onchange:e=>{S.sub.cqMe=e.target.value;ls('sub',S.sub)}})):null),
-    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--sky-soft)'}),'Class of ’28'),h('span',null,h('i',{style:'background:var(--surface)'}),'Class of ’29'),h('span',null,h('i',{style:'background:var(--coral-soft)'}),'Do not fill'),canW?h('span',{class:'muted'},'Click an open slot and type your first and last name.'):null),
+    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--y0-soft);box-shadow:inset 3px 0 0 var(--y0)'}),'Class of ’28 slots'),h('span',null,h('i',{style:'background:var(--y1-soft);box-shadow:inset 3px 0 0 var(--y1)'}),'Class of ’29 slots'),h('span',null,h('i',{style:'background:var(--coral-soft)'}),'Do not fill'),canW?h('span',{class:'muted'},'Click an open slot and type your first and last name.'):null),
     h('datalist',{id:'cqnames'},[...q.c28,...q.c29].map(p=>h('option',{value:p.name}))),
     weeks.map(w=>h('div',{class:'cqwk tw'},h('div',{class:'cqgrid'},
       h('div',{class:'h'},w.label),w.days.slice(0,4).map(d=>h('div',{class:'h'},d)),h('div',{class:'h'},w.weLabel),w.days.slice(4).map(d=>h('div',{class:'h'},d)),
@@ -665,7 +694,7 @@ VIEWS.roster=function(){
   if(cur==='umd') body=umdView();
   else if(cur==='coc') body=gridView('grids/coc');
   else { const p=D('life/pairings'); body=p? h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Supervisor (’29)'),h('th',null,'Flight'),h('th',null,'Supervisee(s) (’30)'))),h('tbody',null,p.rows.map(r=>h('tr',null,h('td',{style:'font-weight:600'},r.sup),h('td',null,r.flight),h('td',null,r.sees.join(' · '))))))) : emptyState('No pairings yet.'); }
-  return h('div',{class:'stack'},head('Roster','Unit manning, chain of command and supervisor pairings.',segEl),body);
+  return h('div',{class:'stack'},head('Roster','Unit manning, chain of command and supervisor pairings.',segEl),h('div',{class:'row small muted'},'Class colors:',classLegend()),body);
 };
 function umdView(){
   const r=D('roster/main'); if(!r) return emptyState('No roster yet.');
@@ -681,7 +710,7 @@ function umdView(){
       if(ed&&ed.key===key){ const f=ed.f; const inp=(k,w)=>h('input',{type:'text',id:'umd'+k,value:f[k]||'',style:`min-width:${w||80}px;padding:3px 5px`,oninput:e=>f[k]=e.target.value});
         rows.push(h('tr',null,h('td',null,inp('pos',180)),h('td',null,inp('cls',50)),h('td',null,inp('rank',70)),h('td',null,inp('name',150)),h('td',null,inp('flight',100)),h('td',null,inp('phone',110)),h('td',null,inp('email',200)),h('td',null,h('div',{class:'row'},h('button',{class:'btn sm pri',onclick:()=>saveUmd(si,pi,f)},'Save'),h('button',{class:'btn sm',onclick:()=>{S.edit.umd=null;render()}},'Cancel')))));
         return; }
-      rows.push(h('tr',null,h('td',null,p.pos),h('td',null,p.cls),h('td',{style:'white-space:nowrap'},p.rank),h('td',{style:'font-weight:600;white-space:nowrap'},p.name),h('td',{class:'small'},p.flight),
+      rows.push(h('tr',{class:ycls(yearOf(p.cls))||null},h('td',null,p.pos),h('td',null,clsTag(p.cls)),h('td',{style:'white-space:nowrap'},p.rank),h('td',{style:'font-weight:600;white-space:nowrap'},p.name),h('td',{class:'small'},p.flight),
         staff?h('td',{class:'mono small',style:'white-space:nowrap'},c?c.phone:''):null, staff?h('td',{class:'small',style:'overflow-wrap:anywhere'},c?c.email:''):null,
         staff?h('td',null,h('button',{class:'btn sm',onclick:()=>{S.edit.umd={key,f:{...p,phone:c?c.phone:'',email:c?c.email:''}};render()}},'Edit')):null));
     });
@@ -711,7 +740,7 @@ function gridView(path,canEd){
   const q=norm(S.sub['gq'+path]||'');
   const trs=[];
   for(let r=1;r<=g.maxr;r++){ const tds=[];
-    for(let c=1;c<=g.maxc;c++){ const k=r+','+c; if(skip.has(k)) continue; const v=g.cells[k]||''; const f=g.fills[k]; const sp=span[k];
+    for(let c=1;c<=g.maxc;c++){ const k=r+','+c; if(skip.has(k)) continue; const v=g.cells[k]||''; const f0=g.fills[k]; const f=/^#[0-9a-fA-F]{3,8}$/.test(f0||'')?f0:''; /* only plain colors, never other CSS */ const sp=span[k];
       const hit=q&&norm(v).includes(q);
       const st=(f?`background:${f};`:'')+(hit?'outline:3px solid var(--sun);outline-offset:-3px;font-weight:700;':'');
       if(S.edit.gridCell===path+'|'+k) tds.push(h('td',{rowspan:sp?sp[0]:null,colspan:sp?sp[1]:null},h('input',{type:'text',id:'gcin',value:v,style:'min-width:110px;padding:2px 4px;font-size:12px',onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();saveCell(path,k,e.target.value)} if(e.key==='Escape'){S.edit.gridCell=null;render()}},onblur:e=>saveCell(path,k,e.target.value)})));
@@ -1676,7 +1705,7 @@ VIEWS.me=function(){
   const meCol=`data/users/${S.uid}`;
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
-    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
+    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
     h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'To sign'),h('div',{class:'v'},String(pending.length))),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
     myWeekPanel(name),
     h('div',{class:'grid2'},
@@ -1952,8 +1981,8 @@ function myWeekPanel(name){
     h('p',{class:'small muted',style:'margin:4px 0 10px'},'Mandatory events, your class’s events, the step brief schedule and your A-staff preflight items. The full outlook is on the Dozen Daily.'),
     h('div',{class:'myweek'},days.map(day=>h('div',{class:'mwday'+(day.d===t?' today':'')+(day.d<t?' past':'')},
       h('div',{class:'mwh'},h('b',null,day.label||new Date(day.d+'T12:00').toLocaleDateString('en-US',{weekday:'long'})),h('span',{class:'mono small'},fmtShort(day.d))),
-      day.items.length?h('ul',{class:'mwl'},day.items.map(it=>h('li',{class:'mw-'+it.k+(it.k==='step'&&it.role&&it.role!=='Everyone'&&!/leads|supports/.test(it.role)?'':'')},
-        h('span',{class:'chip '+chip[it.k][1]},it.k==='staff'&&it.tag?it.tag:chip[it.k][0]),
+      day.items.length?h('ul',{class:'mwl'},day.items.map(it=>h('li',{class:'mw-'+it.k+(it.k==='cls'&&prof.year?' ycls '+ycls(prof.year):'')},
+        it.k==='cls'&&prof.year?clsTag(prof.year,'Class of ’'+prof.year.slice(2)):h('span',{class:'chip '+chip[it.k][1]},it.k==='staff'&&it.tag?it.tag:chip[it.k][0]),
         h('span',{class:'mwt'},it.t,it.k==='step'&&it.role?h('b',{class:'mwrole'},' · '+it.role):null)))):h('p',{class:'small muted',style:'margin:4px 0 0'},'Nothing scheduled.')))));
 }
 
@@ -2433,10 +2462,18 @@ function fbAssets(){ return {
     const id='img_'+uid(); await withRetry(()=>FB.fs.doc('photofull/'+id).set({d:full,by:FB.user.uid,own:FB.user.uid,at:firebase.firestore.FieldValue.serverTimestamp()}));
     return {id,url:thumb}; },
   async delete(id){ if(id&&/^img_/.test(id)) try{ await FB.fs.doc('photofull/'+id).delete(); }catch(e){} } }; }
-async function photoFull(id,fallback){ const w=window.open('','_blank'); try{ const s=id?await FB.fs.doc('photofull/'+id).get():null; const d=s&&s.exists?s.data().d:fallback;
-    if(!d){ if(w) w.close(); return toast('That photo is no longer available.'); }
-    const blob=await (await fetch(d)).blob(); const url=URL.createObjectURL(blob); if(w) w.location=url; else window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000);
-  }catch(e){ if(w) w.close(); toast('Couldn’t open the photo. Try again.'); } }
+// Opens a photo full size. Only real JPEG/PNG/WebP pictures are ever shown, and they're shown as an <img> on a blank page,
+// so a "photo" that is secretly a web page or script can't run inside the site.
+const IMG_DATA=/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+async function photoFull(id,fallback){
+  let d=null;
+  try{ if(id&&/^img_[\w]{1,40}$/.test(id)){ const s=await FB.fs.doc('photofull/'+id).get(); d=s.exists?s.data().d:null; } }catch(e){}
+  if(!(typeof d==='string'&&IMG_DATA.test(d))) d=(typeof fallback==='string'&&IMG_DATA.test(fallback))?fallback:null;
+  if(!d) return toast('That photo can’t be opened.');
+  const w=window.open('about:blank','_blank'); if(!w) return toast('Allow pop-ups to view full size.');
+  try{ w.opener=null; w.document.title='CS-12 photo'; w.document.body.style.cssText='margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh';
+    const img=w.document.createElement('img'); img.src=d; img.alt='Squadron photo'; img.style.cssText='max-width:100%;max-height:100vh'; w.document.body.appendChild(img);
+  }catch(e){ w.close(); toast('Couldn’t open the photo.'); } }
 function fbUser(){ const u=FB.user, m=FB.member||{}; const owner=!!OWNER&&(u.email||'').toLowerCase()===OWNER;
   return { id:async()=>u.uid, isOwner:async()=>owner, canEdit:async()=>owner||m.role==='staff', can:async()=>true }; }
 
@@ -2445,11 +2482,24 @@ async function fbGoogle(){ const p=new firebase.auth.GoogleAuthProvider(); p.set
   try{ await FB.auth.signInWithPopup(p); }catch(e){ if(/popup/.test(e.code||'')) await FB.auth.signInWithRedirect(p); else toast('Sign-in didn’t finish: '+(e.message||e.code)); } }
 const AUTH_MSG={'auth/invalid-credential':'That email and password don’t match. Try again, or use Forgot password.','auth/wrong-password':'That email and password don’t match. Try again, or use Forgot password.','auth/user-not-found':'No password is set up for that email yet. Click “First time? Create your password”.','auth/email-already-in-use':'That email already has a password. Sign in, or use Forgot password.','auth/weak-password':'Pick a longer password (8+ characters).','auth/invalid-email':'That doesn’t look like a full email address.','auth/too-many-requests':'Too many tries. Wait a few minutes, or reset your password.','auth/network-request-failed':'Can’t reach the sign-in service. Check your connection.','auth/user-disabled':'This account has been turned off. Ask the Chief of Staff.','auth/operation-not-allowed':'Password sign-in isn’t switched on yet. The site owner needs to enable Email/Password in Firebase.'};
 const authMsg=e=>AUTH_MSG[e&&e.code]||('Sign-in didn’t work: '+((e&&e.message)||'try again'));
+/* ---------- account protection ---------- */
+const COMMON_PW=['password','passw0rd','123456','12345678','qwerty','letmein','welcome','iloveyou','admin','monkey','dragon','football','baseball','abc123','111111','sunshine','princess','usafa','academy','falcon','falcons','airforce','cs12','dirtydozen','squadron','cadet','colorado'];
+function pwProblem(pw,email){ pw=String(pw||''); const low=pw.toLowerCase();
+  if(pw.length<12) return 'Use at least 12 characters. A short phrase like "blue-weekend-pizza" works well.';
+  if(/^(.)\1+$/.test(pw)) return 'Don’t repeat one character.';
+  if(/(0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf)/i.test(low)&&new Set(low).size<7) return 'That’s too easy to guess. Mix in more words or characters.';
+  if(COMMON_PW.some(w=>low.replace(/[^a-z0-9]/g,'').includes(w)&&low.replace(/[^a-z0-9]/g,'').length-w.length<6)) return 'That’s built on a common word people guess first. Add more of your own words.';
+  const local=String(email||'').split('@')[0].toLowerCase().replace(/^c\d{2}/,''); if(local.length>3&&low.includes(local.split('.')[0])&&local.split('.')[0].length>3) return 'Don’t use your name in your password.';
+  return ''; }
+// after 5 wrong passwords in a row, this browser has to wait before trying again (on top of Firebase's own limits)
+function failWait(){ try{ const f=JSON.parse(sessionStorage.getItem('cs12:fails')||'{"n":0,"until":0}'); return f; }catch(e){ return {n:0,until:0}; } }
+function failNote(ok){ try{ if(ok){ sessionStorage.removeItem('cs12:fails'); return; } const f=failWait(); f.n++; if(f.n>=5) f.until=Date.now()+Math.min(15*60e3,30e3*2**(f.n-5)); sessionStorage.setItem('cs12:fails',JSON.stringify(f)); }catch(e){} }
 const emailOK=e=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((e||'').trim());
 async function fbPwSignIn(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.'); if(!st.pw) return toast('Enter your password.');
-  try{ await FB.auth.signInWithEmailAndPassword(em,st.pw); st.pw=''; }catch(e){ st.msg=authMsg(e); render(); } }
+  const f=failWait(); if(f.until>Date.now()){ st.msg=`Too many wrong tries. Wait ${Math.ceil((f.until-Date.now())/1000)} seconds, or use Forgot password.`; return render(); }
+  try{ await FB.auth.signInWithEmailAndPassword(em,st.pw); st.pw=''; failNote(true); }catch(e){ if(/invalid-credential|wrong-password|user-not-found/.test(e&&e.code||'')) failNote(false); st.msg=authMsg(e); render(); } }
 async function fbPwCreate(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.');
-  if((st.pw||'').length<8) return toast('Use at least 8 characters.'); if(st.pw!==st.pw2) return toast('The passwords don’t match.');
+  const bad=pwProblem(st.pw,em); if(bad){ st.msg=bad; return render(); } if(st.pw!==st.pw2) return toast('The passwords don’t match.');
   try{ const cred=await FB.auth.createUserWithEmailAndPassword(em,st.pw); st.pw=st.pw2=''; try{ await cred.user.sendEmailVerification(); }catch(e){ console.warn(e); } }catch(e){ st.msg=authMsg(e); render(); } }
 async function fbPwReset(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.');
   try{ await FB.auth.sendPasswordResetEmail(em); }catch(e){ if(e&&e.code!=='auth/user-not-found'){ st.msg=authMsg(e); return render(); } }
@@ -2463,7 +2513,20 @@ async function fbFinishLink(){ if(!FB.auth.isSignInWithEmailLink(location.href))
   if(!email) email=window.prompt('Confirm the email address you used to get this sign-in link:');
   if(!email) return;
   try{ await FB.auth.signInWithEmailLink(email,location.href); try{localStorage.removeItem('cs12:emailForSignIn')}catch(e){} history.replaceState(null,'',location.pathname); }catch(e){ toast('That sign-in link expired or was already used. Request a new one.'); } }
-async function fbSignOut(){ try{ await FB.auth.signOut(); }catch(e){} location.hash=''; location.reload(); }
+// Signing out also wipes what this browser kept: saved paperwork drafts and the offline copy of squadron data, so the next person on a shared computer sees nothing.
+async function fbSignOut(){
+  try{ Object.keys(localStorage).filter(k=>/^cs12:(builder|emailForSignIn|act)/.test(k)).forEach(k=>localStorage.removeItem(k)); }catch(e){}
+  try{ await FB.auth.signOut(); }catch(e){}
+  try{ await FB.fs.terminate(); await FB.fs.clearPersistence(); }catch(e){}
+  location.hash=''; location.reload(); }
+const OFFICIAL_HOST=window.CS12_OFFICIAL_HOST||'cadet-squadron-12.github.io';
+const offHost=()=>{ const hn=location.hostname; return !!hn&&hn!==OFFICIAL_HOST&&!/^(local|localhost|127\.0\.0\.1)$/.test(hn); };
+// inactivity sign-out: staff after 12 hours, members after 30 days
+const IDLE_MS={staff:12*3600e3,member:30*24*3600e3};
+function lastActive(){ try{ return +localStorage.getItem('cs12:act')||0; }catch(e){ return 0; } }
+function markActive(){ const n=Date.now(); if(n-(markActive.t||0)<60e3) return; markActive.t=n; try{ localStorage.setItem('cs12:act',String(n)); }catch(e){} }
+function idleCheck(role){ const last=lastActive(); if(last&&Date.now()-last>IDLE_MS[role]){ toast('Signed out after a long time away.'); fbSignOut(); return true; } markActive(); return false; }
+console.log('%cStop!','color:#D62828;font-size:28px;font-weight:800','\nThis is a browser feature for developers. If someone told you to paste something here, it’s a scam that could give them your CS-12 account.');
 async function fbRequestAccess(name){ if(!name.trim()) return toast('Enter your name as it appears on the roster.');
   try{ await FB.fs.doc('requests/'+FB.user.email.toLowerCase()).set({email:FB.user.email.toLowerCase(),name:name.trim(),uid:FB.user.uid,created:new Date().toISOString()}); FB.requested=true; render(); toast('Request sent to squadron staff'); }catch(e){ toast('Couldn’t send the request. Try again.'); } }
 
@@ -2480,7 +2543,7 @@ function signInPanel(){
     const go=()=>mode==='in'?fbPwSignIn(st):mode==='new'?fbPwCreate(st):fbPwReset(st);
     const key=e=>{ if(e.key==='Enter') go(); };
     const title={in:'CS-12 members only',new:'Create your password',reset:'Reset your password'}[mode];
-    const lede={in:'Sign in with your squadron email and password.',new:'First time here? Use the squadron email staff added to the access list, then pick a password (8+ characters). We’ll email you once to confirm it’s yours.',reset:'Enter your squadron email and we’ll send you a link to set a new password.'}[mode];
+    const lede={in:'Sign in with your squadron email and password.',new:'First time here? Use the squadron email staff added to the access list, then pick a password of 12+ characters (a short phrase works well). We’ll email you once to confirm it’s yours.',reset:'Enter your squadron email and we’ll send you a link to set a new password.'}[mode];
     return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},title),h('p',{class:'muted'},lede),
       h('div',{class:'stack',style:'gap:10px;max-width:320px;margin:0 auto;text-align:left'},
         h('label',{class:'f'},'Email',h('input',{type:'email',id:'fbem',autocomplete:'username',placeholder:'c27first.last@afacademy.af.edu',value:st.email,oninput:e=>st.email=e.target.value,onkeydown:key})),
@@ -2492,7 +2555,8 @@ function signInPanel(){
         mode!=='in'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('in')},'Back to sign in'):null,
         mode!=='new'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('new')},'First time? Create your password'):null,
         mode!=='reset'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('reset')},'Forgot password?'):null),
-      h('p',{class:'small muted',style:'margin:12px 0 0'},'Only emails on the CS-12 access list can get in.'),
+      offHost()?h('div',{class:'banner bad small',style:'margin-top:12px'},h('b',null,'Careful: '),`this page isn’t at the official CS-12 address (${OFFICIAL_HOST}). Don’t enter your password here.`):null,
+      h('p',{class:'small muted',style:'margin:12px 0 0'},'Only emails on the CS-12 access list can get in. Only ever sign in at ',h('b',null,OFFICIAL_HOST),'. Squadron staff will never ask for your password.'),
       h('button',{type:'button',class:'linkbtn small',style:'margin:10px auto 0;display:block',onclick:fbGoogle},'Site owner: sign in with Google'));
   }
   if(FB.state==='pending') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Not on the access list'),
@@ -2578,6 +2642,13 @@ boot=async function(){
     let m=null; try{ const s=await FB.fs.doc('members/'+em).get(); m=s.exists?s.data():null; }catch(e){}
     if(!m&&OWNER&&em===OWNER){ m={role:'staff',name:'Owner'}; try{ await FB.fs.doc('members/'+em).set({role:'staff',name:u.displayName||'Owner',added:new Date().toISOString()},{merge:true}); }catch(e){} }
     if(!m){ FB.state='pending'; try{ FB.requested=(await FB.fs.doc('requests/'+em).get()).exists; }catch(e){} S.tab='hub'; render(); return; }
+    const role=(m.role==='staff'||em===OWNER)?'staff':'member';
+    if(idleCheck(role)) return;
+    ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,markActive,{passive:true}));
+    setInterval(()=>idleCheck(role),5*60e3);
+    // paperwork drafts are kept per person, so two people on one computer never see each other's
+    { const key='builder:'+u.uid; const mine=ls(key); const legacy=ls('builder'); Object.keys(B).forEach(k=>delete B[k]); Object.assign(B,mine||legacy||{}); if(legacy){ try{ localStorage.removeItem('cs12:builder'); }catch(e){} if(!mine) ls(key,B); }
+      bsave=function(){ clearTimeout(bsave.t); bsave.t=setTimeout(()=>ls(key,B),400); }; }
     started=true; FB.state='member'; FB.member=m; window.PUBLIC=false;
     TABS.splice(0,TABS.length,...FULL_TABS); if(m.role==='staff'||em===OWNER) TABS.push(['access','Access 🔑']);
     S.tab=TABS.some(t=>t[0]===want)?want:'home';
@@ -2653,7 +2724,7 @@ const _sendHeadsUp=sendHeadsUp, _saveMyDraft=saveMyDraft, _sendDiscipline=sendDi
 const _renderTabs0=renderTabs;
 renderTabs=function(){ _renderTabs0();
   const who=$('#who');
-  if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(navigator.onLine?null:h('span',{class:'pill view',style:'background:var(--coral);color:#fff'},'Offline'),h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')); }
+  if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(...[navigator.onLine?null:h('span',{class:'pill view',style:'background:var(--coral);color:#fff'},'Offline'),h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')].filter(Boolean)); }
   else if(FB.state==='pending') who.replaceChildren(h('button',{class:'btn sm',style:'background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',onclick:fbSignOut},'Sign out'));
   else who.replaceChildren();
   $('#tabs').hidden=FB.state!=='member';
