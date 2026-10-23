@@ -52,6 +52,7 @@ header.mast{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;backgroun
 .mast h1{font-family:var(--display);font-weight:800;font-size:clamp(20px,3.2vw,28px);margin:0;letter-spacing:-.01em;line-height:1.1}
 .mast .sub{font-size:12px;color:var(--mast-sub);letter-spacing:.06em;text-transform:uppercase}
 .mast .who{margin-left:auto;font-size:12px;text-align:right;color:var(--mast-sub)}
+.mast .who{display:flex;align-items:center;gap:6px;flex:none}.mast .who .btn{white-space:nowrap}
 .pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
 .pill.staff{background:var(--sun);color:var(--navy)}
 .pill.view{background:var(--mast-hover);color:#E6EBF2}
@@ -82,6 +83,7 @@ h4{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;c
 .btn:hover{background:var(--sunk)}
 .btn.pri{background:var(--sky);border-color:var(--sky);color:#fff}
 .btn.pri:hover{filter:brightness(1.07)}
+.linkbtn{background:none;border:0;padding:2px;color:var(--sky);text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
 .btn.sun{background:var(--sun);border-color:var(--sun);color:var(--on-accent)}
 .btn.danger{color:var(--coral)}
 .btn.sm{padding:3px 8px;font-size:13px;border-radius:8px}
@@ -156,6 +158,8 @@ button.st{cursor:pointer}
 .cal .d .who{font-weight:700}
 .cal .d .note{color:var(--coral);font-weight:600;font-size:11.5px}
 .cal .d button{all:unset;cursor:pointer;display:block;width:100%}
+.cal .d .wd{display:none}
+@media (max-width:640px){.cal{grid-template-columns:minmax(0,1fr);gap:6px}.cal .dn,.cal .d.out,.cal .d.past{display:none}.cal .d{display:flex;align-items:center;gap:12px;min-height:0;padding:8px 10px;font-size:14px;overflow-wrap:normal}.cal .d .n{flex:none;width:62px;font-size:12px}.cal .d .wd{display:inline}.cal .d button{flex:1;display:flex;gap:10px;align-items:baseline;justify-content:space-between}.cal .d > .who{flex:1}}
 /* sheet grids */
 .sheet{border-collapse:collapse;font-size:12px}
 .sheet td{border:1px solid var(--line);padding:3px 6px;min-width:46px;height:24px;white-space:pre-line;vertical-align:middle;text-align:center}
@@ -209,7 +213,7 @@ button.step{cursor:pointer}
 .sdolay{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px}
 @media (max-width:900px){.sdolay{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.cal{gap:2px}.cal .d{font-size:10.5px;padding:3px;min-height:56px}.cal .dn{font-size:9.5px;padding:0}}
-@media (max-width:640px){ .daily-logo{height:70px;top:16px;transform:none;right:12px} .daily-top{margin-right:78px} .daily-name,.daily-tag{margin-right:0} .mast .who{display:none} .week{min-width:900px} }
+@media (max-width:640px){ .daily-logo{height:70px;top:16px;transform:none;right:12px} .daily-top{margin-right:78px} .daily-name,.daily-tag{margin-right:0} .mast .who{font-size:11px} .mast .who .pill{display:none} .mast .top{gap:10px} .mast h1{font-size:20px} nav.tabs{-webkit-mask-image:linear-gradient(90deg,#000 82%,transparent);mask-image:linear-gradient(90deg,#000 82%,transparent);padding-right:40px} nav.tabs button{padding:7px 10px;font-size:13.5px} table.umd td{white-space:nowrap} .week{min-width:900px} }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -233,7 +237,8 @@ function h(tag, a, ...kids){
   const el=document.createElement(tag);
   if(a) for(const k in a){
     const v=a[k]; if(v==null||v===false) continue;
-    if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
+    if(k==='onclick') el.addEventListener('click',clickGuard(v)); // a button can't fire twice while its save is still running
+    else if(k.startsWith('on')) el.addEventListener(k.slice(2),v);
     else if(k==='class') el.className=v;
     else if(k==='style') el.style.cssText=v;
     else if(k==='value') el.value=v;
@@ -244,6 +249,17 @@ function h(tag, a, ...kids){
 }
 function add(el,kids){for(const k of kids){ if(k==null||k===false) continue; if(Array.isArray(k)) add(el,k); else el.append(k instanceof Node?k:document.createTextNode(String(k))); }}
 const $=s=>document.querySelector(s);
+function clickGuard(fn){ return function(e){ const el=e.currentTarget; if(el&&el.dataset&&el.dataset.busy) return; let r; try{ r=fn.call(this,e); }catch(err){ console.error(err); toast('Something went wrong. Try again.'); return; }
+  if(r&&typeof r.then==='function'&&el&&el.tagName==='BUTTON'){ el.dataset.busy='1'; el.setAttribute('aria-busy','true'); el.disabled=true;
+    r.catch(err=>{ console.error(err); toast('Something went wrong. Try again.'); }).finally(()=>{ delete el.dataset.busy; el.removeAttribute('aria-busy'); el.disabled=false; }); } }; }
+// only web, email and phone links (and our own pictures) can be opened from stored data
+function safeUrl(u,allowImg){ u=String(u||'').trim(); if(/^(https?:\/\/|mailto:|tel:)/i.test(u)) return u; if(allowImg&&/^data:image\/(jpeg|png|webp|gif);/i.test(u)) return u; return '#'; }
+let _lastErrToast=0;
+function softError(msg){ const n=Date.now(); if(n-_lastErrToast>8000){ _lastErrToast=n; try{ toast(msg); }catch(e){} } }
+window.addEventListener('error',e=>{ console.error(e.error||e.message); });
+window.addEventListener('unhandledrejection',e=>{ console.error(e.reason); softError('Something didn’t finish. Check your connection and try again.'); });
+window.addEventListener('offline',()=>{ softError('You’re offline. Changes won’t save until you reconnect.'); try{ renderTabs(); }catch(e){} });
+window.addEventListener('online',()=>{ try{ toast('Back online'); renderTabs(); }catch(e){} });
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2600)}
 function ls(k,v){try{ if(v===undefined){const s=localStorage.getItem('cs12:'+k);return s?JSON.parse(s):null} localStorage.setItem('cs12:'+k,JSON.stringify(v)) }catch(e){return null}}
 const pad=n=>String(n).padStart(2,'0');
@@ -261,7 +277,55 @@ const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 /* ---------- app state ---------- */
 const S={docs:{}, photos:[], dirt:[], actions:[], ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
 const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','a46/vault','staff/a46import'];
-const D=p=>S.docs[p];
+const D=p=>{ const v=S.docs[p]; const o=S.overlay&&S.overlay[p]; return (v&&o)?o(v):v; };
+/* ---------- data shape guard ----------
+   Every record is repaired to the shape the tabs expect as it loads, so a half-saved record,
+   an old version's data or a typo can't crash a tab. ''/0/[]/{} stand for "a string/number/list/object of this shape";
+   {__map__:T} is a lookup keyed by ids or dates whose values look like T; null means "leave as is". */
+const SHAPES={
+  'config/site':{links:[{label:'',url:''}],outlook:{days:[''],quote:'',title:'',rows:[{label:'',cells:['']}]},leaders:[{name:'',role:'',phone:'',email:''}]},
+  'roster/main':{sections:[{name:'',people:[{cls:'',flight:'',name:'',pos:'',rank:''}]}],unitCC:''},
+  'staff/contacts':{byName:{__map__:{email:'',phone:''}}},
+  'staff/notes':{cwocDoorCode:''},
+  'taskers/board':{columns:[{id:'',label:''}],groups:[{name:'',people:[{id:'',name:'',rank:''}]}],status:{__map__:{__map__:null}}},
+  'sdo/schedule':{days:{__map__:''},notes:{__map__:''},overview:['']},
+  'cq/board':{c28:[{name:'',nick:''}],c29:[{name:'',nick:''}],fill:{__map__:''},weeks:[{days:[''],label:'',month:'',weLabel:'',rows:[{wd:'',we:'',slots:[{id:'',k:'',w:''}]}]}]},
+  'allcall/board':{groups:[{name:'',people:['']}],here:{__map__:null}},
+  'recall/board':{classes:[{year:'',people:['']}],status:{__map__:null}},
+  'signoff/form1':{classes:[{year:'',people:['']}],signed:{__map__:null},title:''},
+  'signoff/rooming':{classes:[{year:'',people:['']}],signed:{__map__:null},title:''},
+  'life/birthdays':{list:[{md:'',name:''}]},
+  'life/pairings':{rows:[{flight:'',sup:'',sees:['']}]},
+  'grids/mitches':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
+  'grids/lockers':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
+  'grids/rooming':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
+  'grids/coc':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
+  'a46/vault':null,'staff/a46import':null
+};
+const COL_SHAPES={
+  headsup:{kind:'Paperwork',from:'',subject:'(details missing)',extra:'',suspense:'',routing:[''],signed:{__map__:null},status:'Active',created:''},
+  dirt:{text:'',cat:'',date:''},
+  photos:{url:'',caption:'',created:''},
+  actions:{text:'',owner:'',due:''},
+  ldrtasks:{title:'',assignee:'',due:'',status:'',byRole:''},
+  mine:{text:'',due:'',kind:'',title:''},
+  discipline:{items:{__map__:{kind:'',status:'',created:'',from:''}}}
+};
+const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+function shapeOf(v,t){
+  if(t===null||t===undefined) return v;
+  if(Array.isArray(t)){ if(!Array.isArray(v)) return []; const it=t[0]; return it===undefined?v.slice():v.filter(x=>x!==null&&x!==undefined).map(x=>shapeOf(x,it)); }
+  if(isObj(t)){
+    if('__map__' in t){ const o=isObj(v)?v:{}; const out={}; for(const k in o){ if(o[k]!==null&&o[k]!==undefined) out[k]=shapeOf(o[k],t.__map__); } return out; }
+    const o=isObj(v)?v:{}; const out={...o}; for(const k in t) out[k]=shapeOf(o[k],t[k]); return out;
+  }
+  if(typeof t==='string'){ if(typeof v==='string') return v; if(v===null||v===undefined||typeof v==='object') return t; return String(v); }
+  if(typeof t==='number'){ const n=typeof v==='number'?v:parseFloat(v); return isFinite(n)?n:0; }
+  if(typeof t==='boolean') return !!v;
+  return v;
+}
+function normDoc(path,data){ if(!isObj(data)) return null; try{ return path in SHAPES?shapeOf(data,SHAPES[path]):data; }catch(e){ console.warn('shape',path,e); return data; } }
+function normCol(name,items){ const t=COL_SHAPES[name]; return (items||[]).filter(isObj).map(x=>{ try{ const out=t?shapeOf(x,t):x; out.id=x.id; return out; }catch(e){ return x; } }); }
 
 async function boot(){
   render();
@@ -273,25 +337,28 @@ async function boot(){
   if(!db){ S.ready=true; S.nodb=true; render(); return; }
   let first=0;
   for(const p of DOCS){
-    db.doc(p).onSnapshot(s=>{ S.docs[p]=s.exists?s.data():null; if(++first>=DOCS.length) S.ready=true; schedule(); }, e=>console.warn(p,e));
+    db.doc(p).onSnapshot(s=>{ S.docs[p]=s.exists?normDoc(p,s.data()):null; if(++first>=DOCS.length) S.ready=true; schedule(); }, e=>console.warn(p,e));
   }
-  db.collection('photos').onSnapshot(q=>{S.photos=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  db.collection('dirt').onSnapshot(q=>{S.dirt=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  if(S.canEdit) db.collection('discipline').onSnapshot(q=>{S.discipline=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  db.collection('headsup').onSnapshot(q=>{S.headsup=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  if(S.uid) db.collection('data/users/'+S.uid).onSnapshot(q=>{S.mine=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  db.collection('ldrtasks').onSnapshot(q=>{S.ldr=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
-  db.collection('actions').onSnapshot(q=>{S.actions=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},e=>console.warn(e));
+  // photos load the first time someone opens the Photos tab (newest 60), not on every page load
+  S.startPhotos=()=>{ if(S._photosOn) return; S._photosOn=true; db.collection('photos',{newest:60}).onSnapshot(q=>{S.photos=normCol('photos',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e)); };
+  db.collection('dirt',{newest:60}).onSnapshot(q=>{S.dirt=normCol('dirt',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  if(S.canEdit) db.collection('discipline',{newest:300}).onSnapshot(q=>{S.discipline=normCol('discipline',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  db.collection('headsup',{newest:250}).onSnapshot(q=>{S.headsup=normCol('headsup',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  if(S.uid) db.collection('data/users/'+S.uid,{newest:150}).onSnapshot(q=>{S.mine=normCol('mine',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  db.collection('ldrtasks',{newest:250}).onSnapshot(q=>{S.ldr=normCol('ldrtasks',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  db.collection('actions',{newest:150}).onSnapshot(q=>{S.actions=normCol('actions',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
   setTimeout(()=>{S.ready=true;schedule()},4000);
 }
 function schedule(){ if(schedule.t) return; schedule.t=requestAnimationFrame(()=>{schedule.t=0; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.pending=true;return;} render();}); }
 document.addEventListener('focusout',()=>setTimeout(()=>{ if(S.pending){ const a=document.activeElement; if(!(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){S.pending=false;render();} }},120));
 
 /* ---------- writes ---------- */
-function dbErr(e){ console.warn(e); toast(e&&e.code==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff for edit access.':e&&e.code==='quota_exceeded'?'The database is full. Delete old records and try again.':'That didn’t save. Check your connection and try again.'); }
-async function upd(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ if(D(path)) await S.db.doc(path).update(obj); else await S.db.doc(path).set(obj); }catch(e){dbErr(e)} }
+function dbErr(e){ console.warn(e); const c=e&&e.code; toast(c==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff if you should.':c==='quota_exceeded'?'That’s too big to save. Shorten it or split it up.':c==='offline'||!navigator.onLine?'You’re offline. Reconnect and try again.':c==='resource-exhausted'?'The site is very busy right now. Wait a minute and try again.':'That didn’t save. Check your connection and try again.'); }
+async function upd(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ await S.db.doc(path).update(obj); }catch(e){dbErr(e)} } // update merges (and creates the record if needed), so it never wipes other fields
 async function setDoc(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ await S.db.doc(path).set(obj); return true }catch(e){dbErr(e); return false} }
-async function delDoc(path){ try{ await S.db.doc(path).delete(); }catch(e){dbErr(e)} }
+async function delDoc(path){ if(!S.db) return; try{ await S.db.doc(path).delete(); }catch(e){dbErr(e)} }
+// change a shared record based on its newest saved copy (safe when two staff edit the same list at once)
+async function mutDoc(path,fn){ if(!S.db) return toast('Sign in to make changes.'); try{ const ref=S.db.doc(path); if(ref.mutate) return await ref.mutate(cur=>fn(normDoc(path,cur||{})||{})); const s=await ref.get(); const next=await fn(normDoc(path,s.exists?s.data():{})||{}); if(next!==undefined) await ref.set(next); return true; }catch(e){ dbErr(e); return false; } }
 
 /* inline confirm (no confirm() in the viewer) */
 function confirmBtn(label, onYes, cls='btn sm danger'){
@@ -309,6 +376,7 @@ const TABS=[
 function go(t){ S.tab=t; try{ history.replaceState(null,'','#'+t) }catch(e){} ls('tab',t); render(); window.scrollTo({top:0}); }
 function renderTabs(){
   $('#tabs').replaceChildren(...TABS.map(([k,l])=>h('button',{type:'button','aria-current':S.tab===k?'page':null,onclick:()=>go(k)},l)));
+  const cur=$('#tabs [aria-current=page]'); if(cur&&cur.scrollIntoView) try{ cur.scrollIntoView({block:'nearest',inline:'nearest'}); }catch(e){}
   $('#who').replaceChildren(S.nodb?h('span',{class:'pill view'},'Offline view'): S.canEdit?h('span',{class:'pill staff'},'Staff access'):h('span',{class:'pill view'},S.canWrite?'Contributor':'View only'));
 }
 function render(){
@@ -419,7 +487,7 @@ VIEWS.taskers=function(){
     const v=(tk.status[p.id]||{})[c.id]||''; const cls=/^yes/i.test(v)?'yes':v?'no':'na';
     const txt=v||'—';
     if(!canW) return h('td',null,h('span',{class:'st '+cls},txt));
-    return h('td',null,h('button',{class:'st '+cls,type:'button',title:'Click to change',onclick:()=>{ const i=TK_CYCLE.indexOf(/^yes/i.test(v)?'Yes':v?'No':''); const nv=TK_CYCLE[(i+1)%3]; upd('taskers/board',{status:{[p.id]:{[c.id]:nv}}}); }},txt));
+    return h('td',null,h('button',{class:'st '+cls,type:'button',title:'Click to change',onclick:()=>{ const i=TK_CYCLE.indexOf(/^yes/i.test(v)?'Yes':v?'No':''); const nv=TK_CYCLE[(i+1)%3]; if(typeof tkWrite==='function') tkWrite(p.id,c.id,nv); else upd('taskers/board',{status:{[p.id]:{[c.id]:nv}}}); }},txt));
   };
   const rows=[];
   tk.groups.forEach(g=>{
@@ -442,15 +510,16 @@ VIEWS.taskers=function(){
         h('div',{class:'f'},'Classes',h('div',{class:'row'},['2027','2028','2029','2030'].map(y=>h('label',{class:'ck'},h('input',{type:'checkbox',checked:(nc.classes||(nc.classes=['2027','2028','2029','2030'])).includes(y),onchange:e=>{ nc.classes=e.target.checked?[...new Set([...nc.classes,y])]:nc.classes.filter(x=>x!==y); }}),"’"+y.slice(2)))))),
       h('button',{class:'btn pri',style:'margin-top:10px',onclick:()=>{ if(!nc.label.trim()) return toast('Name the tasker first.'); if(!nc.classes.length) return toast('Pick at least one class.');
           const id='t'+uid(); const st={}; let n=0,unk=0; tk.groups.forEach(g=>g.people.forEach(p=>{ const y=tkClassOf(p); if(!y){unk++;return;} if(nc.classes.includes(y)){ st[p.id]={[id]:'No'}; n++; } }));
-          upd('taskers/board',{columns:[...tk.columns,{id,label:nc.label.trim(),due:nc.due||'',classes:[...nc.classes].sort(),by:myName()||'',created:today()}],status:st});
+          const col={id,label:nc.label.trim().slice(0,120),due:nc.due||'',classes:[...nc.classes].sort(),by:myName()||'',created:today()};
+          mutDoc('taskers/board',b=>{ b.columns=[...b.columns.filter(x=>x.id!==id),col]; Object.keys(st).forEach(pid=>{ b.status[pid]={...(b.status[pid]||{}),...st[pid]}; }); return b; });
           toast(`Added for ${n} cadets`+(unk?` · ${unk} couldn’t be matched to a class`:'')); S.edit.newCol=null; render(); }},'Add tasker')
     ):null,
     canW&&tk.columns.length? h('div',{class:'panel'},h('h3',null,'Manage taskers'),h('p',{class:'small muted',style:'margin-top:-4px'},'Change a due date or remove a tasker. Removing it takes it off the board and off everyone’s My Squadron page.'),
       h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,['Tasker','Classes','Due','Done',''].map(x=>h('th',null,x)))),
         h('tbody',null,tk.columns.map((c,i)=>h('tr',null,h('td',{style:'font-weight:600'},c.label),h('td',{class:'small'},c.classes?c.classes.map(y=>"’"+y.slice(2)).join(' '):'—'),
-          h('td',null,h('input',{type:'date',id:'cd'+c.id,style:'width:150px;padding:3px 6px',value:tkDue(c),onchange:e=>upd('taskers/board',{columns:tk.columns.map(x=>x.id===c.id?{...x,due:e.target.value}:x)})})),
+          h('td',null,h('input',{type:'date',id:'cd'+c.id,style:'width:150px;padding:3px 6px',value:tkDue(c),onchange:e=>{ const v=e.target.value; mutDoc('taskers/board',b=>{ b.columns=b.columns.map(x=>x.id===c.id?{...x,due:v}:x); return b; }); }})),
           h('td',{class:'num mono'},`${counts[i].y}/${counts[i].y+counts[i].n}`),
-          h('td',null,confirmBtn('Remove',()=>{ const st={}; Object.keys(tk.status||{}).forEach(pid=>{ if((tk.status[pid]||{})[c.id]!=null) st[pid]={[c.id]:null}; }); upd('taskers/board',{columns:tk.columns.filter(x=>x.id!==c.id),status:st}); toast('Tasker removed'); })))))))):null
+          h('td',null,confirmBtn('Remove',()=>{ mutDoc('taskers/board',b=>{ b.columns=b.columns.filter(x=>x.id!==c.id); Object.keys(b.status).forEach(pid=>{ if(b.status[pid]) delete b.status[pid][c.id]; }); return b; }).then(ok=>ok&&toast('Tasker removed')); })))))))):null
   );
 };
 
@@ -500,8 +569,8 @@ function sdoView(){
     if(i>=35&&d.getMonth()!==m-1) break;
     const ed=S.canEdit&&S.edit.sdoDay===k;
     const c=nm&&S.canEdit?contactFor(nm):null;
-    cells.push(h('div',{class:'d'+(d.getMonth()!==m-1?' out':'')+(k===t?' today':'')},
-      h('div',{class:'n'},d.getDate()),
+    cells.push(h('div',{class:'d'+(d.getMonth()!==m-1?' out':'')+(k===t?' today':'')+(k<t?' past':'')},
+      h('div',{class:'n'},d.getDate(),h('span',{class:'wd'},' '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()])),
       note?h('div',{class:'note'},note):null,
       ed? h('div',null,h('input',{type:'text',id:'sdoin',value:nm||'',list:'sdonames',style:'padding:3px 5px;font-size:12px',onkeydown:e=>{ if(e.key==='Enter'){ e.preventDefault(); saveSdo(k,e.target.value); } if(e.key==='Escape'){S.edit.sdoDay=null;render();} }}),nameDatalist('sdonames'),h('div',{class:'row',style:'margin-top:4px'},h('button',{class:'btn sm pri',onclick:()=>saveSdo(k,$('#sdoin').value)},'Save'),h('button',{class:'btn sm',onclick:()=>{S.edit.sdoDay=null;render()}},'Cancel')))
         : S.canEdit? h('button',{title:'Change SDO',onclick:()=>{S.edit.sdoDay=k;render();setTimeout(()=>$('#sdoin')&&$('#sdoin').focus(),0)}},h('div',{class:'who'},nm||h('span',{class:'muted'},'+ assign')),c?h('div',{class:'mono',style:'font-size:11px'},c.phone):null)
@@ -552,7 +621,7 @@ function cqView(){
     h('div',{class:'grid2'},tracker(q.c28,'Class of 2028'),tracker(q.c29,'Class of 2029'))
   );
 }
-function saveCq(id,v){ if(S.edit.cqSlot!==id) return; S.edit.cqSlot=null; const cur=(D('cq/board').fill||{})[id]||''; v=(v||'').trim(); if(v!==cur) upd('cq/board',{fill:{[id]:v}}); render(); }
+function saveCq(id,v){ if(S.edit.cqSlot!==id) return; S.edit.cqSlot=null; const cur=(D('cq/board').fill||{})[id]||''; v=(v||'').trim().slice(0,60); if(v!==cur){ if(typeof cqWrite==='function') cqWrite(id,v); else upd('cq/board',{fill:{[id]:v}}); } render(); }
 
 /* generic checklist (All Call, Recall, Form 1, Rooming check) */
 function checklistView(path,groupKey,mapKey,title,lede,opts={}){
@@ -606,12 +675,14 @@ function umdView(){
   return h('div',{class:'stack'},
     h('div',{class:'row'},h('div',{class:'small muted'},'Unit Commander: ',h('b',null,r.unitCC)),h('span',{class:'spacer'}),h('input',{type:'text',id:'umdq',placeholder:'Search name, position, flight…',style:'max-width:280px',value:S.sub.umdq||'',onchange:e=>{S.sub.umdq=e.target.value;render()}})),
     !staff?h('div',{class:'banner info small'},'Phone numbers and emails are visible to staff only.'):null,
-    h('div',{class:'tw',style:'max-height:72vh'},h('table',{class:'t'},h('thead',null,h('tr',null,['Position','Class','Rank','Name','Flight'].map(x=>h('th',null,x)),staff?[h('th',null,'Phone'),h('th',null,'Email'),h('th',null,'')]:null)),h('tbody',null,rows))));
+    h('div',{class:'tw',style:'max-height:72vh'},h('table',{class:'t umd'},h('thead',null,h('tr',null,['Position','Class','Rank','Name','Flight'].map(x=>h('th',null,x)),staff?[h('th',null,'Phone'),h('th',null,'Email'),h('th',null,'')]:null)),h('tbody',null,rows))));
 }
 async function saveUmd(si,pi,f){
-  const r=JSON.parse(JSON.stringify(D('roster/main'))); const old=r.sections[si].people[pi];
-  r.sections[si].people[pi]={pos:f.pos,cls:f.cls,rank:f.rank,name:f.name,flight:f.flight};
-  await upd('roster/main',{sections:r.sections});
+  const cur=D('roster/main'); const old=((cur.sections[si]||{}).people||[])[pi]; if(!old){ S.edit.umd=null; render(); return toast('That row moved. Try again.'); }
+  const row={pos:(f.pos||'').trim(),cls:(f.cls||'').trim(),rank:(f.rank||'').trim(),name:(f.name||'').trim(),flight:(f.flight||'').trim()};
+  if(!row.name) return toast('Enter a name.');
+  const ok=await mutDoc('roster/main',r=>{ const sec=r.sections[si]; if(!sec) return undefined; let idx=sec.people.findIndex(p=>p.name===old.name&&p.pos===old.pos); if(idx<0) idx=pi; if(!sec.people[idx]) return undefined; sec.people[idx]=row; return r; });
+  if(!ok){ return; }
   if(old.name!==f.name||(contactFor(f.name)||{}).phone!==f.phone||(contactFor(f.name)||{}).email!==f.email) await upd('staff/contacts',{byName:{[f.name]:{phone:f.phone||'',email:f.email||''}}});
   S.edit.umd=null; toast('Roster updated'); render();
 }
@@ -685,6 +756,7 @@ async function shrinkImage(file){
   try{ const bmp=await createImageBitmap(file); const k=Math.min(1,2000/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); return await new Promise(r=>c.toBlob(b=>r(b||file),'image/jpeg',0.86)); }catch(e){ return file; }
 }
 function photosView(){
+  if(S.startPhotos) S.startPhotos();
   const canUp=!!S.assets&&!S.nodb;
   const st=S.edit.photo||(S.edit.photo={caption:'',busy:false});
   const list=(S.photos||[]).slice().sort((a,b)=>(b.created||'').localeCompare(a.created||''));
@@ -692,7 +764,7 @@ function photosView(){
     if(!files||!files.length) return; st.busy=true; render(); let n=0;
     for(const file of files){ if(!/^image\//.test(file.type)){ toast(file.name+' isn’t a photo.'); continue; }
       try{ const blob=await shrinkImage(file); const a=await S.assets.upload(blob); await setDoc('photos/'+uid(),{assetId:a.id,url:a.url,caption:st.caption.trim(),created:new Date().toISOString(),by:S.uid||null}); n++; }
-      catch(e){ console.warn(e); toast(e&&e.code==='quota_exceeded'?'Photo storage is full. Ask staff to clear out old photos.':'Couldn’t upload '+file.name+'.'); } }
+      catch(e){ console.warn(e); toast(e&&e.code==='quota_exceeded'?'That photo is too large even after shrinking. Try a smaller one.':e&&e.code==='bad-image'?e.message:'Couldn’t upload '+file.name+'.'); } }
     st.busy=false; st.caption=''; if(n) toast(n>1?n+' photos added':'Photo added'); render();
   };
   return h('div',{class:'stack'},
@@ -701,7 +773,7 @@ function photosView(){
       h('div',{class:'row',style:'margin-top:10px'},h('label',{class:'btn pri',style:st.busy?'opacity:.6;pointer-events:none':''},st.busy?'Uploading…':'Choose photos',h('input',{type:'file',accept:'image/*',multiple:true,hidden:true,onchange:e=>upload([...e.target.files])})),h('span',{class:'small muted'},'Large photos are resized automatically.')))
       : h('div',{class:'banner info small'},'Photo uploads are open to squadron members with Contributor or Editor access.'),
     list.length? h('div',{class:'photos'},list.map(p=>h('figure',{class:'ph'},
-      h('a',{href:p.url,target:'_blank',rel:'noopener'},h('img',{src:p.url,alt:p.caption||'Squadron photo',loading:'lazy'})),
+      h('a',{href:'#',title:'Open full size',onclick:e=>{ e.preventDefault(); if(typeof photoFull==='function') photoFull(p.assetId,p.url); else window.open(safeUrl(p.url,true),'_blank','noopener'); }},h('img',{src:safeUrl(p.url,true),alt:p.caption||'Squadron photo',loading:'lazy'})),
       h('figcaption',null,h('span',{class:'grow'},p.caption||''),h('span',{class:'mono',style:'font-size:11px'},fmtShort((p.created||'').slice(0,10))),
         (S.canEdit||(S.uid&&p.by===S.uid))?confirmBtn('×',async()=>{ try{ if(S.assets) await S.assets.delete(p.assetId); }catch(e){} delDoc('photos/'+p.id); }):null)))) : emptyState('No photos yet. Add the first one above.')
   );
@@ -724,7 +796,7 @@ VIEWS._links=function(compact){
   const site=D('config/site'); const links=(site&&site.links)||[];
   const nl=S.edit.newLink||(S.edit.newLink={label:'',url:''});
   return h('div',{class:'panel'},h('h3',null,'Useful links'),
-    links.length? h('ul',{class:'list'},links.map((l,i)=>h('li',null,h('a',{href:l.url,target:'_blank',rel:'noopener',class:'grow'},l.label),!compact&&S.canEdit?confirmBtn('Remove',()=>upd('config/site',{links:links.filter((_,j)=>j!==i)})):null))) : h('p',{class:'muted'},'No links yet.'),
+    links.length? h('ul',{class:'list'},links.map((l,i)=>h('li',null,h('a',{href:safeUrl(l.url),target:'_blank',rel:'noopener',class:'grow'},l.label),!compact&&S.canEdit?confirmBtn('Remove',()=>upd('config/site',{links:links.filter((_,j)=>j!==i)})):null))) : h('p',{class:'muted'},'No links yet.'),
     !compact&&S.canEdit? h('div',{class:'row',style:'margin-top:10px'},h('input',{type:'text',id:'nll',placeholder:'Label',style:'max-width:220px',value:nl.label,oninput:e=>nl.label=e.target.value}),h('input',{type:'text',id:'nlu',placeholder:'https://…',style:'max-width:320px',value:nl.url,oninput:e=>nl.url=e.target.value}),
       h('button',{class:'btn pri',onclick:()=>{ if(!/^https:\/\//.test(nl.url)) return toast('Links need to start with https://'); upd('config/site',{links:[...links,{label:nl.label||nl.url,url:nl.url}]}); S.edit.newLink=null; }},'Add link')):null);
 };
@@ -1602,7 +1674,7 @@ VIEWS.me=function(){
         h('ul',{class:'list',style:'margin-top:8px'},
           ldr.map(x=>h('li',null,h('span',{class:'chip Returned'},{cos:'From CoS',sel:'From SEL',cc:'From Sq/CC'}[x.byRole]||'Staff'),h('div',{class:'grow'},x.title,h('div',{class:'small',style:`color:${x.due&&x.due<t?'var(--coral)':'var(--muted)'}`},[x.due?(x.due<t?'was due ':'due ')+fmtShort(x.due):'',x.notes].filter(Boolean).join(' · '))),h('button',{class:'btn sm',onclick:()=>upd('ldrtasks/'+x.id,{status:'Done',doneAt:new Date().toISOString()})},'Mark done'))),
           acts.map(a=>h('li',null,h('span',{class:'chip Sent'},a.staff),h('div',{class:'grow'},a.title,a.due?h('div',{class:'small muted'},'due '+fmtShort(a.due)):null))),
-          tk&&tk.length?tk.map(x=>h('li',null,h('span',{class:'chip Returned'},'Tasker'),h('div',{class:'grow'},x.c.label,tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):null),h('button',{class:'btn sm',onclick:()=>upd('taskers/board',{status:{[x.pid]:{[x.c.id]:'Yes'}}})},'Mark done'))):null,
+          tk&&tk.length?tk.map(x=>h('li',null,h('span',{class:'chip Returned'},'Tasker'),h('div',{class:'grow'},x.c.label,tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):null),h('button',{class:'btn sm',onclick:()=>(typeof tkWrite==='function'?tkWrite(x.pid,x.c.id,'Yes'):upd('taskers/board',{status:{[x.pid]:{[x.c.id]:'Yes'}}}))},'Mark done'))):null,
           todos.map(d=>h('li',null,h('input',{type:'checkbox',checked:d.done,onchange:e=>S.db.doc(`${meCol}/${d.id}`).update({done:e.target.checked}).catch(dbErr)}),h('div',{class:'grow',style:d.done?'text-decoration:line-through;color:var(--muted)':''},d.text,d.due?h('div',{class:'small',style:`color:${!d.done&&d.due<t?'var(--coral)':'var(--muted)'}`},'due '+fmtShort(d.due)):null),confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))),
         !acts.length&&!ldr.length&&!(tk&&tk.length)&&!todos.length?h('p',{class:'muted'},'All clear. Staff action items and incomplete taskers with your name show up here too.'):null,
         h('p',{class:'small muted',style:'margin:8px 0 0'},'Your to-dos are private to you.'))),
@@ -1839,11 +1911,11 @@ async function vaultSync(){
   if(!vaultSync.busy){ vaultSync.busy=true; try{ await vaultApplyImport(); } finally { vaultSync.busy=false; } }
 }
 async function vaultSave(mut){
-  if(!V.key) return; const d=D('a46/vault');
-  if(d&&d.ct&&d.ct!==V.lastCt){ try{ V.data=vaultNormalize(await vDecrypt(V.key,d)); }catch(e){} }
-  mut(V.data);
-  const enc=await vEncrypt(V.key,V.data);
-  if(await setDoc('a46/vault',{v:1,salt:d.salt,...enc,updated:new Date().toISOString()})){ V.lastCt=enc.ct; render(); }
+  if(!V.key) return; let saved=null;
+  // decrypt the newest saved copy, apply this one change, re-encrypt: two A4/6 people saving at once can't erase each other's work
+  const ok=await mutDoc('a46/vault',async cur=>{ if(!cur||!cur.ct) return undefined; let data; try{ data=vaultNormalize(await vDecrypt(V.key,cur)); }catch(e){ throw Object.assign(new Error('passcode changed'),{code:'invalid_argument'}); }
+    mut(data); const enc=await vEncrypt(V.key,data); saved={data,ct:enc.ct}; return {v:1,salt:cur.salt,...enc,updated:new Date().toISOString()}; });
+  if(ok&&saved){ V.data=saved.data; V.lastCt=saved.ct; render(); }
 }
 const A46_TABS=[['overview','Overview'],['cul','CUL'],['om','O&M'],['gift','SUPT gift funds'],['smw','SM&W'],['store','Squad funds'],['vendors','Vendors'],['settings','Settings']];
 VIEWS.a46=function(){
@@ -2211,8 +2283,19 @@ const PUB_TABS=[];
 const OWNER=(window.CS12_OWNER||'').toLowerCase();
 
 function fbConfigured(){ const c=window.FIREBASE_CONFIG; return !!(c&&c.apiKey&&!/PASTE/.test(c.apiKey)&&window.firebase); }
-const fbEnc=obj=>({j:JSON.stringify(obj), by:FB.user.uid, at:firebase.firestore.FieldValue.serverTimestamp()});
-const fbDec=d=>{ if(!d) return null; if(typeof d.j==='string'){ try{ return JSON.parse(d.j); }catch(e){ return null; } } const {by,at,...rest}=d; return rest; };
+const MAX_DOC=900000;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Saves that collide with someone else's (busy record, flaky Wi-Fi) are retried with growing, randomized waits.
+async function withRetry(fn){ let last;
+  for(let i=0;i<7;i++){ try{ return await fn(); }catch(e){ last=e; const c=(e&&e.code)||'';
+      if(!/aborted|unavailable|resource-exhausted|deadline-exceeded|internal|cancelled|failed-precondition/.test(c)) throw e;
+      await sleep(Math.min(5000,200*2**i)+Math.random()*400); } }
+  throw last; }
+// "own" = whoever created the record. It never changes on later edits, so the rules can tell who may delete it.
+function fbPack(obj,own){ const j=JSON.stringify(obj); if(j.length>MAX_DOC) throw Object.assign(new Error('too big'),{code:'quota_exceeded'});
+  return {j,by:FB.user.uid,own:own===undefined?FB.user.uid:own,at:firebase.firestore.FieldValue.serverTimestamp()}; }
+const ownOf=s=>s.exists?(s.data().own===undefined?null:s.data().own):undefined;
+const fbDec=d=>{ if(!d) return null; if(typeof d.j==='string'){ try{ return JSON.parse(d.j); }catch(e){ return null; } } const {by,at,own,...rest}=d; return rest; };
 function fbMerge(base,patch){
   const out=(base&&typeof base==='object'&&!Array.isArray(base))?{...base}:{};
   for(const k in patch){ const v=patch[k];
@@ -2221,34 +2304,56 @@ function fbMerge(base,patch){
     else out[k]=v; }
   return out;
 }
-function fbErr(e){ const c=e&&e.code||''; return Object.assign(new Error(e&&e.message||'error'),{code:c==='permission-denied'?'invalid_argument':c}); }
+function fbErr(e){ const c=e&&e.code||''; return Object.assign(new Error(e&&e.message||'error'),{code:c==='permission-denied'?'invalid_argument':c==='unavailable'?'offline':c}); }
 
 function fbDb(){
   const fs=FB.fs;
   const docApi=path=>{ const ref=fs.doc(path); return {
     onSnapshot(cb,err){ return ref.onSnapshot(s=>cb({exists:s.exists,data:()=>fbDec(s.data())}), e=>{ if(e&&e.code==='permission-denied') cb({exists:false,data:()=>null}); else err&&err(e); }); },
     async get(){ const s=await ref.get(); return {exists:s.exists,data:()=>fbDec(s.data())}; },
-    async set(obj){ try{ await ref.set(fbEnc(obj)); }catch(e){ throw fbErr(e); } },
-    async update(obj){ try{ await fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbEnc(fbMerge(s.exists?fbDec(s.data()):{},obj))); }); }catch(e){ throw fbErr(e); } },
-    async delete(){ try{ await ref.delete(); }catch(e){ throw fbErr(e); } } }; };
-  const colApi=path=>({ onSnapshot(cb,err){ return fs.collection(path).onSnapshot(q=>cb({docs:q.docs.map(d=>({id:d.id,data:()=>fbDec(d.data())}))}), e=>{ if(e&&e.code==='permission-denied') cb({docs:[]}); else err&&err(e); }); } });
+    async set(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(obj,ownOf(s))); })); }catch(e){ throw fbErr(e); } },
+    async update(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(fbMerge(s.exists?fbDec(s.data()):{},obj),ownOf(s))); })); }catch(e){ throw fbErr(e); } },
+    // read the newest copy, change it, save it, all as one step: two people editing a list at once can't erase each other's edits
+    async mutate(fn){ try{ return await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); const next=await fn(s.exists?fbDec(s.data()):null); if(next===undefined) return false; t.set(ref,fbPack(next,ownOf(s))); return true; })); }catch(e){ throw fbErr(e); } },
+    async delete(){ try{ await withRetry(()=>ref.delete()); }catch(e){ throw fbErr(e); } } }; };
+  const colApi=(path,opts)=>({ onSnapshot(cb,err){ let q=fs.collection(path); if(opts&&opts.newest){ q=q.orderBy('at','desc').limit(opts.newest); }
+    return q.onSnapshot(qs=>cb({docs:qs.docs.map(d=>({id:d.id,data:()=>fbDec(d.data())}))}), e=>{ if(e&&e.code==='permission-denied') cb({docs:[]}); else err&&err(e); }); } });
   return {doc:docApi, collection:colApi};
 }
 function fbDownloads(){ return {save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),8000); return {status:'saved'}; }}; }
-// Photos are stored as compressed images inside Firestore (no paid Storage plan needed)
+// Photos live in Firestore (no paid Storage plan): a small thumbnail in the list, the full picture in its own record, loaded on click.
+async function fbShrink(bmp,max,q,limit){ let url='';
+  for(let i=0;i<7;i++){ const k=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(bmp.width*k)); c.height=Math.max(1,Math.round(bmp.height*k)); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); url=c.toDataURL('image/jpeg',q); if(url.length<limit) return url; max=Math.round(max*0.8); q=Math.max(0.45,q-0.07); }
+  if(url.length>=limit) throw Object.assign(new Error('too big'),{code:'quota_exceeded'}); return url; }
 function fbAssets(){ return {
-  async upload(blob){ let max=1400,q=0.72,url='';
-    const bmp=await createImageBitmap(blob);
-    for(let i=0;i<6;i++){ const k=Math.min(1,max/Math.max(bmp.width,bmp.height)); const c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); url=c.toDataURL('image/jpeg',q); if(url.length<700000) break; max=Math.round(max*0.8); q=Math.max(0.5,q-0.06); }
-    if(url.length>=900000) throw Object.assign(new Error('too big'),{code:'quota_exceeded'});
-    return {id:'img_'+uid(), url}; },
-  async delete(){ } }; }
+  async upload(blob){ let bmp; try{ bmp=await createImageBitmap(blob); }catch(e){ throw Object.assign(new Error('That file isn’t a picture this browser can read. Try a JPG or PNG.'),{code:'bad-image'}); }
+    const full=await fbShrink(bmp,1600,0.8,750000), thumb=await fbShrink(bmp,420,0.68,60000);
+    const id='img_'+uid(); await withRetry(()=>FB.fs.doc('photofull/'+id).set({d:full,by:FB.user.uid,own:FB.user.uid,at:firebase.firestore.FieldValue.serverTimestamp()}));
+    return {id,url:thumb}; },
+  async delete(id){ if(id&&/^img_/.test(id)) try{ await FB.fs.doc('photofull/'+id).delete(); }catch(e){} } }; }
+async function photoFull(id,fallback){ const w=window.open('','_blank'); try{ const s=id?await FB.fs.doc('photofull/'+id).get():null; const d=s&&s.exists?s.data().d:fallback;
+    if(!d){ if(w) w.close(); return toast('That photo is no longer available.'); }
+    const blob=await (await fetch(d)).blob(); const url=URL.createObjectURL(blob); if(w) w.location=url; else window.open(url,'_blank'); setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){ if(w) w.close(); toast('Couldn’t open the photo. Try again.'); } }
 function fbUser(){ const u=FB.user, m=FB.member||{}; const owner=!!OWNER&&(u.email||'').toLowerCase()===OWNER;
   return { id:async()=>u.uid, isOwner:async()=>owner, canEdit:async()=>owner||m.role==='staff', can:async()=>true }; }
 
 /* ---------- sign-in ---------- */
 async function fbGoogle(){ const p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
   try{ await FB.auth.signInWithPopup(p); }catch(e){ if(/popup/.test(e.code||'')) await FB.auth.signInWithRedirect(p); else toast('Sign-in didn’t finish: '+(e.message||e.code)); } }
+const AUTH_MSG={'auth/invalid-credential':'That email and password don’t match. Try again, or use Forgot password.','auth/wrong-password':'That email and password don’t match. Try again, or use Forgot password.','auth/user-not-found':'No password is set up for that email yet. Click “First time? Create your password”.','auth/email-already-in-use':'That email already has a password. Sign in, or use Forgot password.','auth/weak-password':'Pick a longer password (8+ characters).','auth/invalid-email':'That doesn’t look like a full email address.','auth/too-many-requests':'Too many tries. Wait a few minutes, or reset your password.','auth/network-request-failed':'Can’t reach the sign-in service. Check your connection.','auth/user-disabled':'This account has been turned off. Ask the Chief of Staff.','auth/operation-not-allowed':'Password sign-in isn’t switched on yet. The site owner needs to enable Email/Password in Firebase.'};
+const authMsg=e=>AUTH_MSG[e&&e.code]||('Sign-in didn’t work: '+((e&&e.message)||'try again'));
+const emailOK=e=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((e||'').trim());
+async function fbPwSignIn(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.'); if(!st.pw) return toast('Enter your password.');
+  try{ await FB.auth.signInWithEmailAndPassword(em,st.pw); st.pw=''; }catch(e){ st.msg=authMsg(e); render(); } }
+async function fbPwCreate(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.');
+  if((st.pw||'').length<8) return toast('Use at least 8 characters.'); if(st.pw!==st.pw2) return toast('The passwords don’t match.');
+  try{ const cred=await FB.auth.createUserWithEmailAndPassword(em,st.pw); st.pw=st.pw2=''; try{ await cred.user.sendEmailVerification(); }catch(e){ console.warn(e); } }catch(e){ st.msg=authMsg(e); render(); } }
+async function fbPwReset(st){ const em=(st.email||'').trim().toLowerCase(); if(!emailOK(em)) return toast('Enter your full email address.');
+  try{ await FB.auth.sendPasswordResetEmail(em); }catch(e){ if(e&&e.code!=='auth/user-not-found'){ st.msg=authMsg(e); return render(); } }
+  st.mode='in'; st.msg='If that email has a password, a reset link is on its way. Check junk or quarantine too.'; render(); }
+async function fbResendVerify(){ try{ await FB.user.sendEmailVerification(); toast('Sent. Check your inbox.'); }catch(e){ toast(e&&e.code==='auth/too-many-requests'?'Already sent recently. Wait a few minutes.':'Couldn’t send it. Try again shortly.'); } }
+async function fbCheckVerified(){ try{ await FB.user.reload(); if(FB.auth.currentUser&&FB.auth.currentUser.emailVerified){ await FB.auth.currentUser.getIdToken(true); location.reload(); } else toast('Not confirmed yet. Open the link in the email first.'); }catch(e){ toast('Couldn’t check. Try again.'); } }
 async function fbEmailLink(email){ email=(email||'').trim(); if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Enter a full email address.');
   try{ await FB.auth.sendSignInLinkToEmail(email,{url:location.origin+location.pathname,handleCodeInApp:true}); try{localStorage.setItem('cs12:emailForSignIn',email)}catch(e){} FB.linkSent=email; render(); }catch(e){ toast('Couldn’t send the link: '+(e.message||e.code)); } }
 async function fbFinishLink(){ if(!FB.auth.isSignInWithEmailLink(location.href)) return;
@@ -2263,16 +2368,34 @@ async function fbRequestAccess(name){ if(!name.trim()) return toast('Enter your 
 function signInPanel(){
   const st=S.edit.signin||(S.edit.signin={email:'',name:''});
   if(!fbConfigured()) return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Squadron Hub'),h('p',{class:'muted'},'The squadron hub isn’t connected yet. The site owner needs to paste the Firebase settings into config.js.'));
-  if(FB.state==='out') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'CS-12 members only'),
-    h('p',{class:'muted'},'Sign in with the email address squadron staff gave access to. Everything on this site is for Cadet Squadron 12 members.'),
-    h('button',{class:'btn pri',style:'margin:6px auto 0',onclick:fbGoogle},'Continue with Google'),
-    h('div',{class:'small muted',style:'margin:14px 0 6px'},'Or get a one-time sign-in link by email (works with any address, including your afacademy email):'),
-    FB.linkSent? h('div',{class:'banner info small'},'Link sent to ',h('b',null,FB.linkSent),'. Open it on this device to finish signing in. Check junk mail if it’s not there in a minute.')
-    : h('div',{class:'row',style:'justify-content:center'},h('input',{type:'email',id:'fbem',placeholder:'you@example.com',value:st.email,style:'max-width:260px',oninput:e=>st.email=e.target.value,onkeydown:e=>{if(e.key==='Enter') fbEmailLink(st.email)}}),h('button',{class:'btn',onclick:()=>fbEmailLink(st.email)},'Email me a link')));
-  if(FB.state==='pending') return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},FB.requested?'Request sent':'No access yet'),
-    h('p',{class:'muted'},'Signed in as ',h('b',null,FB.user.email),'. ',FB.requested?'Squadron staff will approve you soon. Refresh this page once they do.':'This email isn’t on the CS-12 access list. If you used a different email for the squadron, sign out and try that one. Otherwise, request access below.'),
-    FB.requested?null:h('div',{class:'row',style:'justify-content:center'},h('input',{type:'text',id:'fbnm',placeholder:'Name as it appears on the roster',value:st.name,style:'max-width:280px',oninput:e=>st.name=e.target.value}),h('button',{class:'btn pri',onclick:()=>fbRequestAccess(st.name)},'Request access')),
+  const logo=h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'});
+  if(FB.state==='verify') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Confirm your email'),
+    h('p',{class:'muted'},'We sent a confirmation link to ',h('b',null,FB.user.email),'. Open it, then come back here and click the button below. Check junk or quarantine if it isn’t there in a couple of minutes.'),
+    h('div',{class:'row',style:'justify-content:center'},h('button',{class:'btn pri',onclick:fbCheckVerified},'I’ve confirmed it'),h('button',{class:'btn',onclick:fbResendVerify},'Send it again')),
     h('button',{class:'btn sm',style:'margin:12px auto 0',onclick:fbSignOut},'Sign out'));
+  if(FB.state==='out'){
+    const mode=st.mode||'in'; const set=m=>{ st.mode=m; st.msg=''; render(); };
+    const go=()=>mode==='in'?fbPwSignIn(st):mode==='new'?fbPwCreate(st):fbPwReset(st);
+    const key=e=>{ if(e.key==='Enter') go(); };
+    const title={in:'CS-12 members only',new:'Create your password',reset:'Reset your password'}[mode];
+    const lede={in:'Sign in with your squadron email and password.',new:'First time here? Use the squadron email staff added to the access list, then pick a password (8+ characters). We’ll email you once to confirm it’s yours.',reset:'Enter your squadron email and we’ll send you a link to set a new password.'}[mode];
+    return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},title),h('p',{class:'muted'},lede),
+      h('div',{class:'stack',style:'gap:10px;max-width:320px;margin:0 auto;text-align:left'},
+        h('label',{class:'f'},'Email',h('input',{type:'email',id:'fbem',autocomplete:'username',placeholder:'c27first.last@afacademy.af.edu',value:st.email,oninput:e=>st.email=e.target.value,onkeydown:key})),
+        mode!=='reset'?h('label',{class:'f'},'Password',h('input',{type:'password',id:'fbpw',autocomplete:mode==='new'?'new-password':'current-password',value:st.pw||'',oninput:e=>st.pw=e.target.value,onkeydown:key})):null,
+        mode==='new'?h('label',{class:'f'},'Confirm password',h('input',{type:'password',id:'fbpw2',autocomplete:'new-password',value:st.pw2||'',oninput:e=>st.pw2=e.target.value,onkeydown:key})):null,
+        st.msg?h('div',{class:'banner info small'},st.msg):null,
+        h('button',{class:'btn pri',onclick:go},{in:'Sign in',new:'Create password',reset:'Email me a reset link'}[mode])),
+      h('div',{class:'row',style:'justify-content:center;gap:14px;margin-top:14px'},
+        mode!=='in'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('in')},'Back to sign in'):null,
+        mode!=='new'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('new')},'First time? Create your password'):null,
+        mode!=='reset'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('reset')},'Forgot password?'):null),
+      h('p',{class:'small muted',style:'margin:12px 0 0'},'Only emails on the CS-12 access list can get in.'),
+      h('button',{type:'button',class:'linkbtn small',style:'margin:10px auto 0;display:block',onclick:fbGoogle},'Site owner: sign in with Google'));
+  }
+  if(FB.state==='pending') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Not on the access list'),
+    h('p',{class:'muted'},'You’re signed in as ',h('b',null,FB.user.email),', but that email isn’t on the CS-12 access list. Sign out and use your squadron email, or ask the Chief of Staff to add you.'),
+    h('button',{class:'btn',style:'margin:8px auto 0',onclick:fbSignOut},'Sign out'));
   return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('p',{class:'muted'},'Checking your sign-in…'));
 }
 
@@ -2322,7 +2445,7 @@ async function fbBulkAdd(text,mems){
   }catch(x){ console.error(x); toast('Only staff can add people.'); return 0; }
   return n; }
 async function fbImport(data){ const paths=Object.keys(data); let b=FB.fs.batch(), n=0, inBatch=0;
-  for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbEnc(data[p])); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
+  for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbPack(data[p],null)); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
   if(inBatch) await b.commit(); return n; }
 
 /* ---------- boot ---------- */
@@ -2348,6 +2471,7 @@ boot=async function(){
     if(started){ if(!u||u.uid!==FB.user.uid) location.reload(); return; }
     FB.user=u;
     if(!u){ FB.state='out'; render(); return; }
+    if(!u.emailVerified){ FB.state='verify'; S.tab='hub'; render(); return; }
     const em=(u.email||'').toLowerCase();
     let m=null; try{ const s=await FB.fs.doc('members/'+em).get(); m=s.exists?s.data():null; }catch(e){}
     if(!m&&OWNER&&em===OWNER){ m={role:'staff',name:'Owner'}; try{ await FB.fs.doc('members/'+em).set({role:'staff',name:u.displayName||'Owner',added:new Date().toISOString()},{merge:true}); }catch(e){} }
@@ -2360,6 +2484,9 @@ boot=async function(){
     window.claude={use:async cap=>({db,user,downloads:dl,assets})[cap]||null};
     S.ready=false; S.docs={};
     await _appBoot();
+    fbStartCq(); fbStartTk();
+    // if staff remove this person from the access list, close their session right away
+    if(em!==OWNER) FB.fs.doc('members/'+em).onSnapshot(s=>{ if(!s.exists) location.reload(); },()=>{});
     if(S.canEdit){
       FB.fs.collection('requests').onSnapshot(q=>{FB.requests=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
       FB.fs.collection('members').onSnapshot(q=>{FB.members=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
@@ -2367,6 +2494,48 @@ boot=async function(){
   });
 };
 const FULL_TABS=TABS.slice();
+/* ---------- CQ sign-ups ----------
+   Each sign-up saves only its own slot in one small record (cqfill/all) instead of rewriting the whole CQ board,
+   so 100 people signing up at once don't collide, and the rules stop anyone overwriting someone else's slot. */
+FB.cq={}; let _cqMemo=null;
+function fbStartCq(){
+  S.overlay=S.overlay||{};
+  S.overlay['cq/board']=doc=>{ if(_cqMemo&&_cqMemo.doc===doc&&_cqMemo.cq===FB.cq) return _cqMemo.out; const fill={...(doc.fill||{})};
+    for(const k in FB.cq){ const e=FB.cq[k]; if(e&&typeof e==='object'&&typeof e.v==='string') fill[k]=e.v; }
+    const out={...doc,fill}; _cqMemo={doc,cq:FB.cq,out}; return out; };
+  FB.fs.doc('cqfill/all').onSnapshot(s=>{ FB.cq=s.exists?(s.data()||{}):{}; fbMigrateCq(); schedule(); },()=>{});
+}
+async function cqWrite(id,v){
+  if(!/^[\w-]{1,40}$/.test(id)) return;
+  const prev=FB.cq[id]; if(prev&&prev.by&&prev.by!==FB.user.uid&&!S.canEdit) return toast('Someone else has that slot. Ask squadron staff to change it.');
+  try{ await withRetry(()=>FB.fs.doc('cqfill/all').set({[id]:{v,by:FB.user.uid,at:Date.now()}},{merge:true})); }
+  catch(e){ toast(e&&e.code==='permission-denied'?'Someone else just took that slot. Pick another one.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
+}
+/* ---------- tasker check-offs: same idea, one small entry per check-off in tkdone/all ---------- */
+FB.tk={}; let _tkMemo=null;
+function fbStartTk(){
+  S.overlay=S.overlay||{};
+  S.overlay['taskers/board']=doc=>{ if(_tkMemo&&_tkMemo.doc===doc&&_tkMemo.tk===FB.tk) return _tkMemo.out; const status={};
+    for(const pid in (doc.status||{})) status[pid]={...doc.status[pid]};
+    for(const k in FB.tk){ const e=FB.tk[k]; const m=/^(.+)__(.+)$/.exec(k); if(!m||!e||typeof e.v!=='string') continue; (status[m[1]]=status[m[1]]||{})[m[2]]=e.v; }
+    const out={...doc,status}; _tkMemo={doc,tk:FB.tk,out}; return out; };
+  FB.fs.doc('tkdone/all').onSnapshot(s=>{ FB.tk=s.exists?(s.data()||{}):{}; schedule(); },()=>{});
+}
+async function tkWrite(pid,cid,v){
+  const k=pid+'__'+cid; if(!/^[\w-]{1,40}__[\w-]{1,40}$/.test(k)) return;
+  if(!['Yes','No',''].includes(v)) v='';
+  try{ await withRetry(()=>FB.fs.doc('tkdone/all').set({[k]:{v,by:FB.user.uid,at:Date.now()}},{merge:true})); }
+  catch(e){ toast(e&&e.code==='permission-denied'?'Only staff can change someone else’s tasker.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
+}
+// one time: move sign-ups that were saved inside the old CQ board into the new per-slot record (staff do this automatically)
+let _cqMig=false;
+async function fbMigrateCq(){
+  if(_cqMig||!S.canEdit) return; const base=S.docs['cq/board']; if(!base||!base.fill) return;
+  const keys=Object.keys(base.fill).filter(k=>base.fill[k]&&/^[\w-]{1,40}$/.test(k)); if(!keys.length) return; _cqMig=true;
+  const add={}; keys.forEach(k=>{ if(!FB.cq[k]) add[k]={v:String(base.fill[k]).slice(0,60),by:'import',at:Date.now()}; });
+  try{ if(Object.keys(add).length) await withRetry(()=>FB.fs.doc('cqfill/all').set(add,{merge:true}));
+    await S.db.doc('cq/board').update({fill:null}); }catch(e){ console.warn('cq move',e); _cqMig=false; }
+}
 /* ---------- who is signed in: match the sign-in email (c27first.last@...) or the Access-list name to the roster ---------- */
 function emailToName(em){ return (em||'').split('@')[0].toLowerCase().replace(/^c\d{2}/,'').split(/[._]+/).map(x=>x.replace(/\d+$/,'')).filter(Boolean).join(' '); }
 function identify(){
@@ -2382,7 +2551,7 @@ const _sendHeadsUp=sendHeadsUp, _saveMyDraft=saveMyDraft, _sendDiscipline=sendDi
 const _renderTabs0=renderTabs;
 renderTabs=function(){ _renderTabs0();
   const who=$('#who');
-  if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')); }
+  if(FB.state==='member'){ const em=FB.user.email; who.replaceChildren(navigator.onLine?null:h('span',{class:'pill view',style:'background:var(--coral);color:#fff'},'Offline'),h('span',{class:'pill '+(S.canEdit?'staff':'view')},S.canEdit?'Staff':'Member'),h('button',{class:'btn sm',style:'margin-left:6px;background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',title:em,onclick:fbSignOut},'Sign out')); }
   else if(FB.state==='pending') who.replaceChildren(h('button',{class:'btn sm',style:'background:transparent;color:#fff;border-color:rgba(255,255,255,.45)',onclick:fbSignOut},'Sign out'));
   else who.replaceChildren();
   $('#tabs').hidden=FB.state!=='member';
