@@ -423,6 +423,11 @@ function renderTabs(){
   $('#who').replaceChildren(S.nodb?h('span',{class:'pill view'},'Offline view'): S.canEdit?h('span',{class:'pill staff'},'Staff access'):h('span',{class:'pill view'},S.canWrite?'Contributor':'View only'));
 }
 function render(){
+  // a redraw can trigger another one (a field losing focus saves and redraws); run them one after another, never nested
+  if(render.busy){ render.again=true; return; }
+  render.busy=true; try{ renderNow(); }finally{ render.busy=false; if(render.again){ render.again=false; requestAnimationFrame(render); } }
+}
+function renderNow(){
   renderTabs();
   const m=$('#main');
   const scroll=window.scrollY;
@@ -900,6 +905,8 @@ const SPEC_1768={"pages":[{"name":"Page1","items":[{"t":"rect","x":35.42,"y":50.
 const SPEC_174={"pages":[{"name":"Page1","items":[{"t":"text","x":273.63,"y":219.42,"w":69.19,"h":0.0,"s":"PERSONAL DATA","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"field","k":"Name","x":40.03,"y":243.27,"w":269.38,"h":12.54,"sz":9.0,"ml":false,"al":"left"},{"t":"text","x":40.6,"y":234.18,"w":144.63,"h":8.67,"s":"1. NAME\u00a0 (Last, First, MI)","sz":8.0,"b":false,"i":true,"al":"left"},{"t":"line","x1":38.23,"y1":231.87,"x2":578.23,"y2":231.87},{"t":"line","x1":311.23,"y1":231.87,"x2":311.23,"y2":257.61},{"t":"field","k":"Rank","x":313.54,"y":243.27,"w":61.74,"h":12.54,"sz":9.0,"ml":false,"al":"center"},{"t":"text","x":314.71,"y":234.18,"w":50.12,"h":8.67,"s":"2. RANK","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"field","k":"AFSC","x":380.04,"y":243.27,"w":79.52,"h":12.54,"sz":9.0,"ml":false,"al":"center"},{"t":"text","x":380.04,"y":234.18,"w":30.23,"h":0.0,"s":"3. AFSC","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":461.86,"y1":231.87,"x2":461.86,"y2":257.61},{"t":"field","k":"DutyPhone","x":464.25,"y":243.27,"w":111.7,"h":12.54,"sz":9.0,"ml":false,"al":"center"},{"t":"text","x":465.38,"y":234.18,"w":71.46,"h":8.67,"s":"4. DUTY PHONE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"field","k":"Unit","x":40.03,"y":268.47,"w":111.54,"h":35.34,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":259.38,"w":108.63,"h":8.67,"s":"5. UNIT/OFFICE SYMBOL","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":153.43,"y1":257.07,"x2":153.43,"y2":305.61},{"t":"field","k":"Reason","x":155.23,"y":268.47,"w":221.08,"h":35.34,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":156.38,"y":259.38,"w":160.1,"h":8.67,"s":"6. REASON FOR COUNSELING","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"field","k":"OtherInfo","x":380.04,"y":279.87,"w":195.56,"h":23.94,"sz":9.0,"ml":true,"al":"left"},{"t":"field","k":"Summary","x":40.52,"y":328.51,"w":535.14,"h":263.25,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":320.83,"w":440.88,"h":8.67,"s":"8. SUMMARY OF COUNSELING\u00a0(Give details, facts, specific dates, times, names, sequence of events, etc.)","sz":8.0,"b":false,"i":true,"al":"left"},{"t":"line","x1":38.23,"y1":318.55,"x2":578.23,"y2":318.55},{"t":"line","x1":38.23,"y1":592.75,"x2":578.23,"y2":592.75},{"t":"field","k":"Recommendations","x":40.03,"y":602.87,"w":535.14,"h":115.14,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":593.82,"w":232.36,"h":8.67,"s":"9. RECOMMENDATIONS AND ADVICE OF COUNSELOR","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":38.23,"y1":718.31,"x2":578.23,"y2":718.31},{"t":"field","k":"NameCounselor","x":40.03,"y":730.02,"w":247.74,"h":23.94,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":720.55,"w":245.31,"h":8.67,"s":"10. NAME, RANK AND DUTY TITLE OF COUNSELOR","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":289.48,"y1":718.5,"x2":289.48,"y2":756.0},{"t":"text","x":484.56,"y":720.55,"w":38.16,"h":0.0,"s":"12. DATE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":38.23,"y1":756.0,"x2":578.23,"y2":756.0},{"t":"text","x":38.23,"y":37.82,"w":539.26,"h":16.91,"s":"RECORD OF INDIVIDUAL COUNSELING","sz":11.0,"b":true,"i":false,"al":"center"},{"t":"text","x":40.03,"y":136.73,"w":8.14,"h":0.0,"s":"I.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":270.93,"y":136.73,"w":74.59,"h":0.0,"s":"COUNSELING TIPS","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":42.33,"y":54.39,"w":532.83,"h":79.77,"s":"PRIVACY ACT STATEMENT\nAUTHORITY:\u00a0 10 U.S.C. 8013, Secretary of the Air Force.\nPRINCIPLE PURPOSE:\u00a0 Reviewed by commanders and personnel officials to assure appropriate assignment, promotion and reenlistment considerations prior to effecting such actions.\u00a0 UIFs also provide information necessary to support administrative separation when further rehabilitation efforts would not be considered effective.\nROUTINE USES:\u00a0 Disclosure generally permitted under 5 U.S.C. 522a(b) of the Privacy Act.\u00a0 DoD 'Blanket Routine Uses' apply.\nDISCLOSURE:\u00a0 Voluntary, failure to provide SSN may impede proper placement in member's military personnel file.\nSORN:\u00a0 F036 AF PC L, Unfavorable Information Files (UIF).","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":40.6,"y":150.57,"w":254.13,"h":8.67,"s":"1. Determine the objective of the counseling before the session begins.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":159.57,"w":107.13,"h":8.67,"s":"2. Hear the individual out.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":168.57,"w":213.62,"h":8.67,"s":"3. Treat the member as having worth and dignity.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":177.57,"w":253.37,"h":8.67,"s":"4. Show sincerity, courtesy, and personal interest in the individual.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":186.57,"w":261.62,"h":8.67,"s":"5. Give the individual the facts, whether they are pleasant or unpleasant.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":196.57,"w":212.89,"h":8.67,"s":"6. Don't brush off any problem as being too trivial.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.6,"y":206.3,"w":171.62,"h":8.67,"s":"7. Don't make snap decisions.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":314.2,"y":150.57,"w":204.02,"h":8.67,"s":"8. Don't make promises if you can't keep them.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":314.2,"y":159.83,"w":259.52,"h":17.6,"s":"9. Don't force decisions on the person - there may be other equally good and acceptable solutions.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":314.2,"y":180.51,"w":147.04,"h":8.67,"s":"10. Refer to other agencies.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":314.2,"y":189.68,"w":226.52,"h":8.67,"s":"11. Make contact for the individual with the referral agency.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":314.2,"y":199.41,"w":258.78,"h":17.6,"s":"12. Follow up referrals to make sure there is a continuity of action and that referrals are completed as soon as possible.","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.03,"y":219.42,"w":10.58,"h":0.0,"s":"II.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":380.04,"y":258.73,"w":194.66,"h":19.49,"s":"7. OTHER INFORMATION (i.e., marital status, course graduation date, date assigned, etc.)","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"text","x":40.03,"y":306.97,"w":13.18,"h":0.0,"s":"III.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":280.98,"y":307.54,"w":54.5,"h":0.0,"s":"COUNSELING","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":292.6,"y":720.55,"w":90.15,"h":8.67,"s":"11. SIGNATURE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":482.23,"y1":718.31,"x2":482.23,"y2":755.81},{"t":"text","x":40.03,"y":757.45,"w":132.85,"h":0.0,"s":"AF FORM 174, 20190520\nPrescribed by: AFI36-2907","sz":9.0,"b":true,"i":false,"al":"left"},{"t":"text","x":234.54,"y":757.45,"w":147.39,"h":13.03,"s":"PREVIOUS EDITIONS ARE OBSOLETE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":377.73,"y1":231.87,"x2":377.73,"y2":305.61},{"t":"line","x1":38.23,"y1":257.07,"x2":578.23,"y2":257.07},{"t":"line","x1":578.23,"y1":36.0,"x2":578.23,"y2":756.0},{"t":"line","x1":38.23,"y1":36.0,"x2":38.23,"y2":756.0},{"t":"line","x1":38.23,"y1":36.0,"x2":578.23,"y2":36.0},{"t":"line","x1":38.23,"y1":305.77,"x2":578.23,"y2":305.77},{"t":"line","x1":38.23,"y1":218.27,"x2":578.23,"y2":218.27},{"t":"line","x1":38.23,"y1":147.8,"x2":578.23,"y2":147.8},{"t":"line","x1":38.23,"y1":134.96,"x2":578.23,"y2":134.96},{"t":"line","x1":38.23,"y1":53.38,"x2":578.23,"y2":53.38},{"t":"field","k":"DateCounselor","x":487.75,"y":735.75,"w":85.47,"h":12.49,"sz":9.0,"ml":false,"al":"center"},{"t":"sig","k":"secIII","x":291.44,"y":730.02,"w":189.34,"h":23.94,"sz":11.0,"ml":false,"al":"left"}]},{"name":"Page2","items":[{"t":"text","x":261.32,"y":325.08,"w":93.82,"h":0.0,"s":"REFERRAL/FOLLOW-UP","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":252.08,"y":394.36,"w":112.3,"h":11.01,"s":"COMMANDER'S COMMENTS","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":36.0,"y":37.85,"w":539.38,"h":17.6,"s":"ACKNOWLEDGMENT OF COUNSELING","sz":9.0,"b":false,"i":false,"al":"center"},{"t":"field","k":"SummaryCounselee","x":40.03,"y":68.79,"w":536.34,"h":217.74,"sz":9.0,"ml":true,"al":"left"},{"t":"line","x1":38.23,"y1":56.29,"x2":578.23,"y2":56.29},{"t":"line","x1":38.23,"y1":287.33,"x2":578.23,"y2":287.33},{"t":"field","k":"NameCounselee","x":40.03,"y":298.12,"w":247.74,"h":23.94,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":288.38,"w":210.51,"h":9.29,"s":"14. NAME AND RANK OF COUNSELEE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":289.48,"y1":287.32,"x2":289.48,"y2":323.86},{"t":"text","x":484.56,"y":288.38,"w":38.16,"h":0.0,"s":"16. DATE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"field","k":"AgenciesRecommended","x":40.6,"y":355.95,"w":536.34,"h":35.34,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":338.37,"w":485.11,"h":17.6,"s":"17. REFERRAL AGENCIES RECOMMENDED (Personal Affairs, Chaplain, Legal Assistance, Medical, Social Actions, Red Cross, etc.)","sz":8.0,"b":false,"i":true,"al":"left"},{"t":"line","x1":38.23,"y1":337.55,"x2":578.23,"y2":337.55},{"t":"line","x1":38.23,"y1":756.0,"x2":578.23,"y2":756.0},{"t":"field","k":"CmdrComments","x":40.86,"y":407.43,"w":535.14,"h":308.94,"sz":9.0,"ml":true,"al":"left"},{"t":"line","x1":38.23,"y1":406.78,"x2":578.23,"y2":406.78},{"t":"line","x1":38.23,"y1":718.52,"x2":578.23,"y2":718.52},{"t":"field","k":"NameCmdr","x":40.03,"y":729.32,"w":247.74,"h":23.94,"sz":9.0,"ml":true,"al":"left"},{"t":"text","x":40.6,"y":719.6,"w":170.43,"h":9.29,"s":"18. NAME AND RANK OF COMMANDER","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":289.48,"y1":718.52,"x2":289.48,"y2":755.66},{"t":"text","x":483.8,"y":719.6,"w":38.16,"h":0.0,"s":"20. DATE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":38.23,"y1":36.0,"x2":38.23,"y2":756.0},{"t":"line","x1":578.23,"y1":36.0,"x2":578.23,"y2":756.0},{"t":"text","x":40.6,"y":57.61,"w":11.38,"h":9.29,"s":"IV.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":292.6,"y":288.38,"w":93.93,"h":9.29,"s":"15. SIGNATURE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":482.23,"y1":287.32,"x2":482.23,"y2":323.86},{"t":"text","x":40.6,"y":325.92,"w":11.38,"h":0.0,"s":"V.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":40.56,"y":394.36,"w":16.85,"h":11.01,"s":"VI.","sz":8.0,"b":true,"i":false,"al":"left"},{"t":"text","x":38.23,"y":758.77,"w":138.98,"h":13.48,"s":"AF FORM 174, 20190520","sz":9.0,"b":true,"i":false,"al":"left"},{"t":"text","x":292.6,"y":719.6,"w":84.74,"h":9.29,"s":"19. SIGNATURE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":482.23,"y1":718.52,"x2":482.23,"y2":755.66},{"t":"line","x1":38.23,"y1":36.0,"x2":578.23,"y2":36.0},{"t":"text","x":232.82,"y":758.15,"w":150.81,"h":10.73,"s":"PREVIOUS EDITIONS ARE OBSOLETE","sz":8.0,"b":false,"i":false,"al":"left"},{"t":"line","x1":38.23,"y1":392.45,"x2":578.23,"y2":392.45},{"t":"line","x1":38.23,"y1":323.63,"x2":578.23,"y2":323.63},{"t":"field","k":"DateCmdr","x":487.75,"y":735.05,"w":85.47,"h":12.49,"sz":9.0,"ml":false,"al":"center"},{"t":"field","k":"DateCounselee","x":487.75,"y":303.85,"w":85.47,"h":12.49,"sz":9.0,"ml":false,"al":"center"},{"t":"text","x":187.05,"y":57.61,"w":242.37,"h":11.01,"s":"13. SUMMARY OF COUNSELEE'S COMMENTS\u00a0(Indicate if none)","sz":8.0,"b":true,"i":true,"al":"left"},{"t":"sig","k":"secIV","x":291.44,"y":298.12,"w":189.34,"h":23.94,"sz":11.0,"ml":false,"al":"left"},{"t":"sig","k":"secVI","x":291.44,"y":729.32,"w":189.34,"h":23.94,"sz":11.0,"ml":false,"al":"left"}]}]};
 </script>
 <script>
+const ymd8=s=>s?String(s).replace(/-/g,''):''; // eSSS dates print as YYYYMMDD
+
 /* ================= PDF ENGINE (pdf-lib) ================= */
 const PH=792, PW=612;
 const WIN=/[^\x20-\x7E\xA0-\xFF–—‘’“”•…\n]/g;
@@ -978,7 +985,7 @@ async function buildEsss(d, doc){
   const page=doc.addPage([PW,PH]);
   const L=['TOONE','TOONE_2','TOONE_3','TOONE_4','TOONE_5'], A=['ACTONE','ACTONE_2','ACTONE_3','ACTONE_4','ACTONE_5'], N=['SIGRDTA','SIGRDTA_3','SIGRDTA_5','SIGRDTA_7','SIGRDTA_9'];
   const R=['TOTWO','TOTWO_2','TOTWO_3','TOTWO_4','TOTWO_5'], RA=['ACTTWO','ACTTWO_2','ACTTWO_3','ACTTWO_4','ACTTWO_5'], RN=['SIGRDB','SIGRDB_3','SIGRDB_5','SIGRDB_7','SIGRDB_9'];
-  const v={SUBJECT:d.subject,SURNAME:d.surname,SYMBOL:d.symbol,PHONE:d.phone,FIELD1:d.typist,CalDt:fmtShort(d.suspense),CalDtB:fmtShort(d.created),SUMMARY:d.summary};
+  const v={SUBJECT:d.subject,SURNAME:d.surname,SYMBOL:d.symbol,PHONE:d.phone,FIELD1:d.typist,CalDt:ymd8(d.suspense),CalDtB:ymd8(d.created),SUMMARY:d.summary};
   d.routing.forEach((r,i)=>{ if(i<5){v[L[i]]=r.to;v[A[i]]=r.action;v[N[i]]=r.name;} else {v[R[i-5]]=r.to;v[RA[i-5]]=r.action;v[RN[i-5]]=r.name;} });
   // summary may overflow: split onto continuation pages
   const sumIt=SPEC_1768.pages[0].items.find(i=>i.k==='SUMMARY'); const sz=9.5;
@@ -1109,20 +1116,29 @@ function fld(obj,key,label,opts={}){
   return h('label',{class:'f'+(opts.wide?' wide':'')},label,opts.hint?h('span',{class:'h'},opts.hint):null,ctl);
 }
 function rosterPick(obj,key,label,onPick,opts={}){
-  if(opts.me&&!obj[key]&&typeof identify==='function'){ const p=identify(); if(p){ obj[key]=p.name; if(onPick) onPick(p); bsave(); } }
-  return fld(obj,key,label,{...opts,list:'bnames',live:true,onchange:e=>{ const p=allPeople().find(x=>norm(x.name)===norm(e.target.value)); if(p&&onPick){ onPick(p); bsave(); render(); } }});
+  if(opts.me&&!obj[key]&&typeof identify==='function'){ const p=identify(); if(p){ obj[key]=lastFirst(p.name); if(onPick) onPick(p); bsave(); } }
+  return fld(obj,key,label,{hint:NAME_HINT,...opts,list:'bnames',live:true,onchange:e=>{ const v=flOf(e.target.value); const p=allPeople().find(x=>norm(x.name)===norm(v)); if(p&&onPick){ const keep=obj[key]; onPick(p); if(!/,/.test(String(obj[key]||''))) obj[key]=lastFirst(keep||p.name); bsave(); render(); } }});
 }
 const classOf=p=>({C1C:'2027',C2C:'2028',C3C:'2029',C4C:'2030'})[p.cls]||'';
 const flightLetter=p=>((p.section||'')+' '+(p.flight||'')).match(/Alpha|Bravo|Charlie|Delta/)?.[0]?.[0]||'X';
-function firstLast(n){ const parts=n.trim().split(/\s+/); return {first:parts[0]||'',last:parts.slice(1).join(' ')||''}; }
-function lastFirst(n){ const {first,last}=firstLast(n); return last?`${last}, ${first}`:first; }
+/* Names: paperwork prints Last, First MI. The name pickers fill that format, and anything typed in either order
+   ("Sophie M Kent" or "Kent, Sophie M") is understood. */
+function nameParts(n){ n=String(n||'').trim().replace(/\s+/g,' '); if(!n) return {first:'',last:'',mi:''};
+  const isMi=w=>/^[A-Za-z]\.?$/.test(w||'');
+  if(n.includes(',')){ const i=n.indexOf(','); const last=n.slice(0,i).trim(); const rest=n.slice(i+1).trim().split(' ').filter(Boolean); let mi=''; if(rest.length>1&&isMi(rest[rest.length-1])) mi=rest.pop(); return {first:rest.join(' '),last,mi:mi.replace('.','').toUpperCase()}; }
+  const w=n.split(' '); let mi=''; if(w.length>2&&isMi(w[1])){ mi=w[1]; w.splice(1,1); } return {first:w[0]||'',last:w.slice(1).join(' '),mi:mi.replace('.','').toUpperCase()}; }
+function firstLast(n){ const p=nameParts(n); return {first:p.first,last:p.last}; }
+const flOf=n=>{ const p=nameParts(n); return [p.first,p.last].filter(Boolean).join(' '); };
+function lastFirst(n){ const p=nameParts(n); if(!p.last) return p.first; return `${p.last}, ${p.first}${p.mi?' '+p.mi+'.':''}`; }
+const NAME_HINT='Pick from the list, then add the middle initial at the end (Kent, Sophie M.).';
+function lfDatalist(id){ const set=new Set(allPeople().map(p=>p.name)); return h('datalist',{id},[...set].map(n=>lastFirst(n)).sort().map(n=>h('option',{value:n}))); }
 function findPos(re,flight){ return allPeople().find(p=>re.test(p.pos)&&(!flight||(p.section||'').startsWith(flight))); }
 function withCls(p){ return p?`${p.cls||''} ${p.name}`.trim():''; }
 
 /* ---------- eSSS ---------- */
 function esssDefaults(){ return {cadet:'',cls:'C4C',year:'2030',flight:'A',phone:'',reason:'',city:'',state:'',address:'',depart:'',departTime:'',ret:'',retTime:'before TAPS',lodging:'',ecName:'',ecRel:'',ecPhone:'',missing:'',good:true,subject:'',summary:'',summaryEdited:false,symbol:'AFCW/CS12',created:today(),routing:[],attach99:false,track:true}; }
 function routingFor(e){
-  const cad=allPeople().find(p=>norm(p.name)===norm(e.cadet));
+  const cad=allPeople().find(p=>norm(p.name)===norm(flOf(e.cadet)));
   const fl={A:'Alpha',B:'Bravo',C:'Charlie',D:'Delta'}[e.flight]||'Alpha';
   const sup=(()=>{ const pr=D('life/pairings'); if(!pr||!cad) return ''; const lf=norm(lastFirst(cad.name)); const row=pr.rows.find(r=>r.sees.some(s=>norm(s.replace(/\s*\(f\)/,''))===lf)); if(!row) return ''; const nm=row.sup.replace(/\s*\(f\)/,'').split(',').map(s=>s.trim()); const full=nm[1]+' '+nm[0]; const p=allPeople().find(x=>norm(x.name)===norm(full)); return p?withCls(p):'C3C '+full; })();
   const chf=withCls(findPos(/^Flight Chief/,fl)), cmdr=withCls(findPos(/^Flight Commander/,fl));
@@ -1144,7 +1160,7 @@ function routingFor(e){
 const md=s=>{ if(!s) return ''; const [,m,d]=s.split('-'); return `${+m}/${+d}`; };
 const ddmmm=s=>{ if(!s) return 'DDMMM'; const [,m,d]=s.split('-'); return pad(+d)+MON3[+m-1].toUpperCase(); };
 function esssSummary(e){
-  const nm=e.cadet||'[Your Name]'; const {first,last}=firstLast(nm);
+  const nm=e.cadet?flOf(e.cadet):'[Your Name]'; const {first,last}=firstLast(nm);
   const dates=e.ret&&e.ret!==e.depart?`${md(e.depart)} to ${md(e.ret)}`:md(e.depart);
   const loc=[e.city,e.state].filter(Boolean).join(', ');
   const p=[];
@@ -1160,7 +1176,7 @@ function esssSummary(e){
 // Suggested approval chain, built from the roster, supervisor pairings and the How to eSSS chain of command
 function esssChainPanel(e){
   if(window.PUBLIC){ const sug=routingFor(e).filter(r=>r.to); return h('div',{class:'panel',style:'background:var(--sky-soft);border-color:transparent'},h('h3',null,'Your approval chain'),h('p',{class:'small muted',style:'margin:4px 0 8px'},`Class of ${e.year} chain from the How to eSSS guide. Type each person’s rank and name in Routing below.`),h('ol',{style:'margin:0;padding-left:22px'},sug.map(r=>h('li',null,h('span',{class:'mono small'},r.to.replace('\n',' ')),r.name?h('b',null,'  '+r.name):null)))); }
-  const cad=allPeople().find(p=>norm(p.name)===norm(e.cadet));
+  const cad=allPeople().find(p=>norm(p.name)===norm(flOf(e.cadet)));
   if(!e.cadet) return h('div',{class:'panel',style:'background:var(--sky-soft);border-color:transparent'},h('h3',null,'Your approval chain'),h('p',{class:'small muted',style:'margin:0'},'Pick your name above and your chain of command fills in from the roster.'));
   if(!cad) return h('div',{class:'banner warn'},h('b',null,'Not on the roster. '),'Pick your name from the list so the chain can fill in, or type each person in Routing below.');
   const sug=routingFor(e).filter(r=>r.name||r.to); const div={A1:'A1 division',A2:'A2 division',A3:'A3 division',A46:'A4/6 division',SE:'Stan/Eval division',SQ:'Squadron Staff',GW:'Group/Wing Staff'}[e.flight];
@@ -1176,7 +1192,7 @@ function builderEsss(){
   const e=B.esss||(B.esss=esssDefaults());
   if(!e.routing.length) e.routing=routingFor(e);
   if(!e.summaryEdited) e.summary=esssSummary(e);
-  if(!e.subjectEdited) e.subject=`Request for an eSSS pass ${md(e.depart)}${e.ret&&e.ret!==e.depart?'-'+md(e.ret):''} for ${e.cls} ${e.cadet||'[Name]'}`.replace(/\s+/g,' ');
+  if(!e.subjectEdited) e.subject=`Request for an eSSS pass ${md(e.depart)}${e.ret&&e.ret!==e.depart?'-'+md(e.ret):''} for ${e.cls} ${e.cadet?flOf(e.cadet):'[Name]'}`.replace(/\s+/g,' ');
   const days=e.depart?workdaysBetween(today(),e.depart):null; const cal=e.depart?Math.round((new Date(e.depart+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
   const checks=[[!!e.address,'Address where you’re staying'],[!!(e.ecName&&e.ecPhone),'Emergency contact (name and phone)'],[!!e.phone,'Your cell number'],[!!e.depart,'Suspense date (departure)'],...(e.need99?[[!!(B.f99&&(B.f99.taken||B.f99.authorized||B.f99.merit||B.f99.make||B.f99.depFlight)),'Form 99 details filled in (leaving Colorado)']]:[])];
   const {first,last}=firstLast(e.cadet||'');
@@ -1209,7 +1225,7 @@ function builderEsss(){
         h('tbody',null,e.routing.map((r,i)=>h('tr',null,h('td',{class:'mono'},i+1),
           h('td',null,h('input',{type:'text',id:'rt'+i,value:r.to.replace('\n',' | '),style:'min-width:130px',oninput:ev=>{r.to=ev.target.value.replace(' | ','\n');bsave()}})),
           h('td',null,h('select',{id:'ra'+i,onchange:ev=>{r.action=ev.target.value;bsave()}},['','Coord','Approve','Sig','Info'].map(a=>h('option',{value:a,selected:r.action===a},a||'—')))),
-          h('td',null,h('input',{type:'text',id:'rn'+i,value:r.name,list:'bnames',style:'min-width:180px',oninput:ev=>{r.name=ev.target.value;bsave()}})))))))),
+          h('td',null,h('input',{type:'text',id:'rn'+i,value:r.name,list:'rnames',style:'min-width:180px',oninput:ev=>{r.name=ev.target.value;bsave()}})))))))),
     h('div',{class:'panel'},h('h3',null,'4 · Summary'),
       h('div',{class:'fgrid'},
         h('label',{class:'f wide'},'Subject',h('input',{type:'text',id:'b_esubj',value:e.subject,oninput:ev=>{e.subject=ev.target.value;e.subjectEdited=true;bsave()}})),
@@ -1226,10 +1242,10 @@ function builderEsss(){
         try{
           const typist=(firstLast(e.cadet).first[0]||'')+(firstLast(e.cadet).last[0]||'');
           const doc=await PDFLib.PDFDocument.create();
-          await buildEsss({subject:e.subject,surname:`${e.cls} ${e.cadet}`,symbol:e.symbol,phone:e.phone,typist:typist.toUpperCase(),suspense:e.depart,created:e.created,summary:e.summary,routing:e.routing},doc);
+          await buildEsss({subject:e.subject,surname:`${e.cls} ${lastFirst(e.cadet)}`,symbol:e.symbol,phone:e.phone,typist:typist.toUpperCase(),suspense:e.depart,created:e.created,summary:e.summary,routing:e.routing},doc);
           if(e.need99){ await appendPdf(doc,await buildForm99(f99FromEsss(e))); }
           const ok=await savePdf(await doc.save(),fname);
-          if(ok&&e.headsUp!==false) await sendHeadsUp('eSSS',`${e.cls} ${e.cadet}`,e.subject,e.routing,`${md(e.depart)}–${md(e.ret)} ${[e.city,e.state].filter(Boolean).join(', ')}`,e.depart);
+          if(ok&&e.headsUp!==false) await sendHeadsUp('eSSS',`${e.cls} ${flOf(e.cadet)}`,e.subject,e.routing,`${md(e.depart)}–${md(e.ret)} ${[e.city,e.state].filter(Boolean).join(', ')}`,e.depart);
           if(ok) await saveMyDraft('esss',e.subject||'eSSS',e);
         }catch(err){ console.error(err); toast('Couldn’t build the PDF: '+err.message); }
         btn.disabled=false;
@@ -1387,7 +1403,7 @@ VIEWS.builder=function(){
   const body=({memo:builderMemo,esss:builderEsss,f99:builderF99,f174:builderF174,f10:builderF10,oconus:()=>VIEWS.oconus(true)}[cur]||builderMemo)();
   return h('div',{class:'stack'},
     head('Paperwork Builder','Fill in the blanks and download a signable PDF. Your drafts stay saved in this browser until you clear them.'),
-    nameDatalist('bnames'),
+    lfDatalist('bnames'), nameDatalist('rnames'),
     h('div',{class:'doccards'},DOCTYPES.map(([k,t,d])=>h('button',{class:'doccard',type:'button','aria-pressed':String(cur===k),onclick:()=>{S.sub.doc=k;ls('sub',S.sub);render()}},h('b',null,t),h('span',null,d)))),
     body,
     h('details',{class:'box'},h('summary',null,'After you download'),h('ol',{class:'small',style:'margin:8px 0 0;padding-left:20px'},
@@ -1455,7 +1471,7 @@ async function makeDocx(body){
   return await zip.generateAsync({type:'uint8array'});
 }
 async function ocItineraryDocx(o){
-  const b=[wPara('Itinerary',{b:true,sz:16,center:true}),wPara(`${o.cls} ${o.cadet}  ·  ${o.depart?fmtDate(o.depart):''} to ${o.ret?fmtDate(o.ret):''}  ·  ${ocPlaces(o).join(', ')}`,{center:true}),wPara(''),
+  const b=[wPara('Itinerary',{b:true,sz:16,center:true}),wPara(`${o.cls} ${flOf(o.cadet)}  ·  ${o.depart?fmtDate(o.depart):''} to ${o.ret?fmtDate(o.ret):''}  ·  ${ocPlaces(o).join(', ')}`,{center:true}),wPara(''),
     wPara('Travel (all modes, including country-to-country transitions)',{b:true}),
     wTable([['Date / time','From','To','Mode','Carrier / number','Notes'],...o.legs.filter(l=>l.from||l.to||l.when).map(l=>[l.when,l.from,l.to,l.mode,[l.carrier,l.num].filter(Boolean).join(' '),[l.notes,l.out?'Departs USA':'',l.home?'Returns to USA':''].filter(Boolean).join(' · ')])]),wPara(''),
     wPara('Lodging',{b:true}),
@@ -1465,22 +1481,22 @@ async function ocItineraryDocx(o){
   return makeDocx(b.join(''));
 }
 async function ocFcgDocx(o){
-  const b=[wPara('DoD Foreign Clearance Guide: Sections I and IV',{b:true,sz:14,center:true}),wPara(`${o.cls} ${o.cadet}  ·  ${ocPlaces(o).join(', ')}`,{center:true}),wPara('Highlighted text marks requirements that could restrict this trip.',{sz:10,center:true}),wPara('')];
+  const b=[wPara('DoD Foreign Clearance Guide: Sections I and IV',{b:true,sz:14,center:true}),wPara(`${o.cls} ${flOf(o.cadet)}  ·  ${ocPlaces(o).join(', ')}`,{center:true}),wPara('Highlighted text marks requirements that could restrict this trip.',{sz:10,center:true}),wPara('')];
   o.countries.filter(c=>c.name).forEach(c=>{ b.push(wPara(`${c.name.toUpperCase()}  (APACS required: ${c.apacs==='yes'?'YES':'No'})`,{b:true,sz:13}),wPara('SECTION I',{b:true}),wPara(c.fcg1||'[Paste Section I here]'),wPara(''),wPara('SECTION IV: PERSONNEL ENTRY REQUIREMENTS FOR LEAVE TRAVEL',{b:true}),wPara(c.fcg4||'[Paste Section IV here]'),wPara('')); });
   return makeDocx(b.join(''));
 }
 async function ocFpPlan(o,c){
   const doc=await PDFLib.PDFDocument.load(await fetchBytes('fpplan.pdf')); const form=doc.getForm(); const helv=await doc.embedFont(PDFLib.StandardFonts.Helvetica);
   const set=(n,v,sz=8)=>{ try{ const f=form.getTextField(n); f.setFontSize(sz); f.setText(clean(v||'')); f.updateAppearances(helv); }catch(e){ console.warn('FP',n,e.message); } };
-  const p=allPeople().find(x=>norm(x.name)===norm(o.cadet));
-  set('Text7',[`${p?p.rank:o.cls} ${o.cadet}`,o.companions].filter(Boolean).join('; ')); set('Text10',o.travelers); set('Text8','CS-12'); set('Text9',o.workPhone);
+  const p=allPeople().find(x=>norm(x.name)===norm(flOf(o.cadet)));
+  set('Text7',[`${p?p.rank:o.cls} ${lastFirst(o.cadet)}`,o.companions].filter(Boolean).join('; ')); set('Text10',o.travelers); set('Text8','CS-12'); set('Text9',o.workPhone);
   set('Text11',o.homePhone); set('Text12',o.phone); set('Text13',o.email); set('Text16',o.ecName); set('Text15',o.ecRel); set('Text14',o.ecPhone);
   set('Text17',`${c.name}${c.level?' (Level '+c.level+')':''}`); set('Text18',c.arrive?fmtShort(c.arrive):''); set('Text19',c.depart?fmtShort(c.depart):'');
   set('Text22',c.hotel); set('Text23',c.hotelPhone); set('Text24',o.purpose==='sponsored'?o.poc:''); set('Text26',c.embPhone); set('Text25',c.embAddr);
   return doc;
 }
 async function ocEsss(o){ const typist=((firstLast(o.cadet).first[0]||'')+(firstLast(o.cadet).last[0]||'')).toUpperCase();
-  return buildEsss({subject:o.subject,surname:`${o.cls} ${o.cadet}`,symbol:'AFCW/CS12',phone:o.phone,typist,suspense:o.depart,created:o.created,summary:o.summary,routing:o.routing},null); }
+  return buildEsss({subject:o.subject,surname:`${o.cls} ${lastFirst(o.cadet)}`,symbol:'AFCW/CS12',phone:o.phone,typist,suspense:o.depart,created:o.created,summary:o.summary,routing:o.routing},null); }
 async function ocForm99(o){ const out=o.legs.find(l=>l.out)||{}; const home=o.legs.find(l=>l.home)||{}; const c0=o.countries[0]||{};
   return buildForm99({name:lastFirst(o.cadet),start:out.when||(o.depart?fmtShort(o.depart):''),ret:home.when||(o.ret?fmtShort(o.ret):''),address:c0.hotel,phone:c0.hotelPhone||o.phone,others:o.companions,
     depFlight:out.num,depAirline:out.carrier,depTime:out.when,arrFlight:home.num,arrAirline:home.carrier,arrTime:home.when}); }
@@ -1534,7 +1550,7 @@ async function saveAny(bytes,filename){
 /* ---- view ---- */
 VIEWS.oconus=function(embedded){
   const o=OC(); if(!o.summaryEdited) o.summary=ocSummary(o);
-  if(!o.subjectEdited) o.subject=`Request for OCONUS travel to ${ocPlaces(o).join(', ')||'[countries]'} ${md(o.depart)}${o.ret?'-'+md(o.ret):''} for ${o.cls} ${o.cadet||'[Name]'}`;
+  if(!o.subjectEdited) o.subject=`Request for OCONUS travel to ${ocPlaces(o).join(', ')||'[countries]'} ${md(o.depart)}${o.ret?'-'+md(o.ret):''} for ${o.cls} ${o.cadet?flOf(o.cadet):'[Name]'}`;
   const [lbl,dl]=OC_DEADLINES[o.brk]||OC_DEADLINES.other; const daysLeft=dl?Math.round((new Date(dl+'T21:00')-new Date())/864e5):null;
   const high=ocHigh(o); const reRoute=()=>{ o.routing=ocRouting(o); bsave(); render(); };
   const named=o.countries.filter(c=>c.name);
@@ -1613,7 +1629,7 @@ VIEWS.oconus=function(embedded){
       h('p',{class:'small'},'Portfolio name: ',h('b',{class:'mono'},ocFileBase(o)+'.pdf')),
       h('ol',{class:'small',style:'margin:0 0 10px;padding-left:20px'},OC_ORDER.map(x=>h('li',null,x))),
       h('div',{class:'row'},
-        h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const files=await ocAllFiles(o); const bytes=await buildPortfolio(files,o); const ok=await savePdf(bytes,ocFileBase(o)+'.pdf'); if(ok&&o.headsUp!==false) await sendHeadsUp('OCONUS',`${o.cls} ${o.cadet}`,o.subject,o.routing,ocPlaces(o).join(', '),o.depart); if(ok) await saveMyDraft('oconus','OCONUS - '+ocFileBase(o),o); }catch(e){ console.error(e); toast('Couldn’t build the portfolio: '+e.message); } b.disabled=false; }},'Download portfolio'),
+        h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const files=await ocAllFiles(o); const bytes=await buildPortfolio(files,o); const ok=await savePdf(bytes,ocFileBase(o)+'.pdf'); if(ok&&o.headsUp!==false) await sendHeadsUp('OCONUS',`${o.cls} ${flOf(o.cadet)}`,o.subject,o.routing,ocPlaces(o).join(', '),o.depart); if(ok) await saveMyDraft('oconus','OCONUS - '+ocFileBase(o),o); }catch(e){ console.error(e); toast('Couldn’t build the portfolio: '+e.message); } b.disabled=false; }},'Download portfolio'),
         window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:o.headsUp!==false,onchange:ev=>{o.headsUp=ev.target.checked;bsave()}}),'Heads-up to my chain'),
         h('details',{class:'box',style:'flex:1;min-width:260px'},h('summary',null,'Download pieces one at a time'),h('div',{class:'row',style:'margin-top:8px'},
           [['eSSS',async()=>[await ocEsss(o),`eSSS - ${ocFileBase(o)}.pdf`]],['Form 99',async()=>[await (await ocForm99(o)).save(),'Form 99.pdf']],['Itinerary (.docx)',async()=>[await ocItineraryDocx(o),'Itinerary.docx']],['FCG (.docx)',async()=>[await ocFcgDocx(o),'Foreign Clearance Guide Sections I and IV.docx']],['Advisories PDF',async()=>[await (await ocImagesPdf(OC_FILES.advisory,'Travel advisory')).save(),'Travel Advisories.pdf']],...named.map(c=>[`FP plan: ${c.name}`,async()=>[await (await ocFpPlan(o,c)).save(),`FP and Emergency Plan - ${c.name}.pdf`]])]
@@ -1630,7 +1646,7 @@ VIEWS.oconus=function(embedded){
 <script>
 /* ================= MY SQUADRON (personal) ================= */
 const stripCls=n=>String(n||'').replace(/^\s*C[1-4]C\s+/i,'').replace(/^(C\/)?(Maj|Capt|Lt Col|1Lt|2Lt|MSgt|TSgt|SSgt|SMSgt|CMSgt|Amn|Col)\.?\s+/i,'').trim();
-function sameName(a,b){ a=norm(stripCls(a)); b=norm(stripCls(b)); if(!a||!b) return false; if(a===b) return true; const pa=a.split(' '), pb=b.split(' '); return pa[pa.length-1]===pb[pb.length-1]&&pa[0][0]===pb[0][0]; }
+function sameName(a,b){ a=norm(typeof flOf==='function'?flOf(stripCls(a)):stripCls(a)); b=norm(typeof flOf==='function'?flOf(stripCls(b)):stripCls(b)); if(!a||!b) return false; if(a===b) return true; const pa=a.split(' '), pb=b.split(' '); return pa[pa.length-1]===pb[pb.length-1]&&pa[0][0]===pb[0][0]; }
 async function saveMyDraft(kind,title,data){ // personal copy of every document someone downloads (private to them)
   if(!S.db||!S.uid) return; try{ await S.db.doc(`data/users/${S.uid}/draft_${uid()}`).set({kind,title:String(title||kind).slice(0,160),data:JSON.parse(JSON.stringify(data)),created:new Date().toISOString()}); }catch(e){ console.warn('draft copy',e); }
 }
