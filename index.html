@@ -116,6 +116,29 @@ tr.y0>td:first-child{box-shadow:inset 4px 0 0 var(--y0)} tr.y1>td:first-child{bo
 .week .yc.y0{background:var(--y0-soft)} .week .yc.y1{background:var(--y1-soft)} .week .yc.y2{background:var(--y2-soft)} .week .yc.y3{background:var(--y3-soft)}
 .mwl li.ycls{border-left:3px solid var(--line);padding-left:6px} .mwl li.ycls.y0{border-color:var(--y0)} .mwl li.ycls.y1{border-color:var(--y1)} .mwl li.ycls.y2{border-color:var(--y2)} .mwl li.ycls.y3{border-color:var(--y3)}
 .clegend{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.socal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.socal .dn{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;padding:2px 4px}
+.socal .sod{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-height:78px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:11.5px;min-width:0;position:relative}
+.socal .sod:hover{border-color:var(--sky)}
+.socal .sod.out{opacity:.4}
+.socal .sod.today{border:2px solid var(--sun)}
+.socal .sod.sel{box-shadow:0 0 0 2px var(--sky)}
+.socal .n{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.socal .socount{position:absolute;top:4px;right:5px;background:var(--sky-soft);color:var(--ink);border-radius:999px;padding:0 7px;font-weight:700;font-size:11px}
+.socal .socount.hi{background:var(--coral);color:#fff}
+.socal .sonames{display:flex;flex-direction:column;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.socal .sonames span{overflow:hidden;text-overflow:ellipsis}
+.socal .soleave{color:var(--coral);font-weight:700;font-size:10.5px}
+@media (max-width:640px){.socal .sonames,.socal .soleave{display:none}.socal .sod{min-height:46px}}
+.cd{display:inline-block;padding:2px 9px;border-radius:999px;font-weight:800;font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cd-late{background:var(--coral);color:#fff} .cd-hot{background:var(--coral-soft);color:var(--coral)} .cd-warm{background:var(--sun-soft);color:var(--ink)} .cd-ok{background:var(--sky-soft);color:var(--ink)}
+.fund{display:inline-block;padding:1px 8px;border-radius:6px;border-left:4px solid var(--fc);background:var(--sunk);font-size:11.5px;font-weight:700;white-space:nowrap}
+table.trk tr.late>td{background:var(--coral-soft)}
+select.stage{padding:3px 6px;font-size:12.5px;font-weight:600;border-radius:8px}
+select.stage.s-Approved{background:var(--mint-soft)} select.stage.s-Sent{background:var(--sky-soft)} select.stage.s-Returned{background:var(--sun-soft)}
+.socal .pev{display:block;font-size:10.5px;line-height:1.3;padding:1px 4px;border-radius:4px;background:var(--fc);color:#10141B;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:600}
+.socal .pev.req{background:transparent;border:1.5px solid var(--fc);color:var(--ink)}
+.socal .pdue{display:block;font-size:10px;color:var(--coral);font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .linkbtn{background:none;border:0;padding:2px;color:var(--sky);text-decoration:underline;cursor:pointer;font:inherit;font-size:13px}
 .btn.sun{background:var(--sun);border-color:var(--sun);color:var(--on-accent)}
 .btn.danger{color:var(--coral)}
@@ -299,8 +322,8 @@ const pad=n=>String(n).padStart(2,'0');
 const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MON3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmtDate(s){ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
-function fmtShort(s){ if(!s) return ''; const [y,m,d]=s.split('-').map(Number); return `${pad(d)} ${MON3[m-1]} ${String(y).slice(2)}`; }
+function fmtDate(s){ if(!s||typeof s!=='string'||!/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) return typeof s==='string'?s:''; const [y,m,d]=s.split('-').map(Number); return `${d} ${MONTHS[m-1]} ${y}`; }
+function fmtShort(s){ if(!s||typeof s!=='string'||!/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) return typeof s==='string'?s:''; const [y,m,d]=s.split('-').map(Number); return `${pad(d)} ${MON3[m-1]} ${String(y).slice(2)}`; }
 const today=()=>iso(new Date());
 const money=n=>'$'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
@@ -346,6 +369,7 @@ const SHAPES={
   'a46/vault':null,'staff/a46import':null
 };
 const COL_SHAPES={
+  signout:{name:'',kind:'',depart:'',ret:'',departTime:'',retTime:'',where:'',note:'',unit:''},
   headsup:{kind:'Paperwork',from:'',subject:'(details missing)',extra:'',suspense:'',routing:[''],signed:{__map__:null},status:'Active',created:''},
   dirt:{text:'',cat:'',date:''},
   photos:{url:'',caption:'',created:''},
@@ -386,6 +410,7 @@ async function boot(){
   S.startPhotos=()=>{ if(S._photosOn) return; S._photosOn=true; db.collection('photos',{newest:60}).onSnapshot(q=>{S.photos=normCol('photos',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e)); };
   db.collection('dirt',{newest:60}).onSnapshot(q=>{S.dirt=normCol('dirt',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
   if(S.canEdit) db.collection('discipline',{newest:300}).onSnapshot(q=>{S.discipline=normCol('discipline',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  db.collection('signout',{newest:400}).onSnapshot(q=>{S.signout=normCol('signout',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
   db.collection('headsup',{newest:250}).onSnapshot(q=>{S.headsup=normCol('headsup',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
   if(S.uid) db.collection('data/users/'+S.uid,{newest:150}).onSnapshot(q=>{S.mine=normCol('mine',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
   db.collection('ldrtasks',{newest:250}).onSnapshot(q=>{S.ldr=normCol('ldrtasks',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
@@ -1203,7 +1228,7 @@ function builderEsss(){
     cal!=null&&cal<14? h('div',{class:'banner '+(cal<7?'bad':'warn')},h('b',null,cal<7?'Less than a week out. ':'Less than 2 weeks out. '),cal<7?'PP won’t sign an eSSS sent within a week unless it’s an emergency.':'eSSSs should go up the chain 2 weeks before the event. Route it today.'):null,
     h('div',{class:'panel'},h('h3',null,'1 · Who and when'),
       h('div',{class:'fgrid'},
-        rosterPick(e,'cadet','Your name',p=>{ e.cls=p.cls||e.cls; e.year=classOf(p)||e.year; e.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c&&c.phone) e.phone=c.phone; e.routing=routingFor(e); },{ph:'Start typing your name',me:true}),
+        rosterPick(e,'cadet','Your name',p=>{ e.cls=p.cls||e.cls; e.year=classOf(p)||e.year; e.flight=routeCodeOf(p.name)||flightLetter(p); const c=contactFor(p.name); if(c&&c.phone) e.phone=c.phone; e.routing=routingFor(e); },{ph:'Start typing your name',me:true}),
         fld(e,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C']}),
         fld(e,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute}),
         fld(e,'flight','Flight or A-staff division',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1 (Personnel)'],['A2','A2 (Intel)'],['A3','A3 (Operations)'],['A46','A4/6 (Support & Comms)'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,hint:'A-staff routes through your Division Chief. Squadron and Group/Wing Staff go straight to the Sq Exec.'}),
@@ -1236,7 +1261,9 @@ function builderEsss(){
     h('div',{class:'panel'},h('h3',null,'5 · Check and download'),
       h('ul',{class:'list'},checks.map(([ok,l])=>h('li',null,h('span',{class:'st '+(ok?'yes':'no')},ok?'✓':'!'),h('span',{class:'grow'},l)))),
       h('div',{class:'row',style:'margin-top:10px'},
-        window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:e.headsUp!==false,onchange:ev=>{e.headsUp=ev.target.checked;bsave()}}),'Give my chain a heads-up on their My Squadron page')),
+        window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:!!e.testRun,onchange:ev=>{e.testRun=ev.target.checked;bsave();render()}}),'Practice run: testing the paperwork, don’t notify my chain or add it to the eSSS tracker'),
+        window.PUBLIC||e.testRun?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:e.headsUp!==false,onchange:ev=>{e.headsUp=ev.target.checked;bsave()}}),'Add my trip to the eSSS tracker')),
+      e.testRun?h('div',{class:'banner warn small'},h('b',null,'Practice run. '),'This download won’t show on the Exec’s eSSS tracker or your chain’s My Squadron page.'):null,
       h('p',{class:'small muted'},'File name: ',h('span',{class:'mono'},fname)),
       h('button',{class:'btn pri',onclick:async ev=>{
         const btn=ev.currentTarget; btn.disabled=true;
@@ -1246,7 +1273,7 @@ function builderEsss(){
           await buildEsss({subject:e.subject,surname:`${e.cls} ${lastFirst(e.cadet)}`,symbol:e.symbol,phone:e.phone,typist:typist.toUpperCase(),suspense:e.depart,created:e.created,summary:e.summary,routing:e.routing},doc);
           if(e.need99){ await appendPdf(doc,await buildForm99(f99FromEsss(e))); }
           const ok=await savePdf(await doc.save(),fname);
-          if(ok&&e.headsUp!==false) await sendHeadsUp('eSSS',`${e.cls} ${flOf(e.cadet)}`,e.subject,e.routing,`${md(e.depart)}–${md(e.ret)} ${[e.city,e.state].filter(Boolean).join(', ')}`,e.depart);
+          if(ok&&e.headsUp!==false&&!e.testRun) await logSignout({name:e.cadet,kind:'eSSS',depart:e.depart,ret:e.ret,departTime:e.departTime,retTime:e.retTime,where:[e.city,e.state].filter(Boolean).join(', ')});
           if(ok) await saveMyDraft('esss',e.subject||'eSSS',e);
         }catch(err){ console.error(err); toast('Couldn’t build the PDF: '+err.message); }
         btn.disabled=false;
@@ -1580,7 +1607,7 @@ VIEWS.oconus=function(embedded){
     high.length?h('div',{class:'banner warn'},h('b',null,`Level ${Math.max(...high.map(c=>+c.level))} advisory: `),`${high.map(c=>c.name).join(', ')} ${high.length>1?'are':'is'} Level 3 or higher, so Col Habben is the final approval on the eSSS. The routing below already includes him.`):null,
     h('div',{class:'panel'},h('h3',null,'1 · Traveler and trip'),
       h('div',{class:'fgrid'},
-        rosterPick(o,'cadet','Your name',p=>{ o.cls=p.cls||o.cls; o.year=classOf(p)||o.year; o.flight=/Command Staff/.test(p.section)?'SQ':/Group\/Wing/.test(p.section)?'GW':flightLetter(p); const c=contactFor(p.name); if(c){ if(c.phone) o.phone=c.phone; if(c.email) o.email=c.email; } o.routing=ocRouting(o); },{me:true}),
+        rosterPick(o,'cadet','Your name',p=>{ o.cls=p.cls||o.cls; o.year=classOf(p)||o.year; o.flight=routeCodeOf(p.name)||flightLetter(p); const c=contactFor(p.name); if(c){ if(c.phone) o.phone=c.phone; if(c.email) o.email=c.email; } o.routing=ocRouting(o); },{me:true}),
         fld(o,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C'],id:'occls'}),
         fld(o,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute,id:'ocyr'}),
         fld(o,'flight','Flight, division or staff',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1'],['A2','A2'],['A3','A3'],['A46','A4/6'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,id:'ocfl'}),
@@ -1630,8 +1657,9 @@ VIEWS.oconus=function(embedded){
       h('p',{class:'small'},'Portfolio name: ',h('b',{class:'mono'},ocFileBase(o)+'.pdf')),
       h('ol',{class:'small',style:'margin:0 0 10px;padding-left:20px'},OC_ORDER.map(x=>h('li',null,x))),
       h('div',{class:'row'},
-        h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const files=await ocAllFiles(o); const bytes=await buildPortfolio(files,o); const ok=await savePdf(bytes,ocFileBase(o)+'.pdf'); if(ok&&o.headsUp!==false) await sendHeadsUp('OCONUS',`${o.cls} ${flOf(o.cadet)}`,o.subject,o.routing,ocPlaces(o).join(', '),o.depart); if(ok) await saveMyDraft('oconus','OCONUS - '+ocFileBase(o),o); }catch(e){ console.error(e); toast('Couldn’t build the portfolio: '+e.message); } b.disabled=false; }},'Download portfolio'),
-        window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:o.headsUp!==false,onchange:ev=>{o.headsUp=ev.target.checked;bsave()}}),'Heads-up to my chain'),
+        h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const files=await ocAllFiles(o); const bytes=await buildPortfolio(files,o); const ok=await savePdf(bytes,ocFileBase(o)+'.pdf'); if(ok&&o.headsUp!==false) if(!o.testRun) await logSignout({name:o.cadet,kind:'OCONUS',depart:o.depart,ret:o.ret,where:ocPlaces(o).join(', ')}); if(ok) await saveMyDraft('oconus','OCONUS - '+ocFileBase(o),o); }catch(e){ console.error(e); toast('Couldn’t build the portfolio: '+e.message); } b.disabled=false; }},'Download portfolio'),
+        window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:!!o.testRun,onchange:ev=>{o.testRun=ev.target.checked;bsave();render()}}),'Practice run: don’t notify my chain or add it to the eSSS tracker'),
+        window.PUBLIC||o.testRun?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:o.headsUp!==false,onchange:ev=>{o.headsUp=ev.target.checked;bsave()}}),'Add my trip to the eSSS tracker'),
         h('details',{class:'box',style:'flex:1;min-width:260px'},h('summary',null,'Download pieces one at a time'),h('div',{class:'row',style:'margin-top:8px'},
           [['eSSS',async()=>[await ocEsss(o),`eSSS - ${ocFileBase(o)}.pdf`]],['Form 99',async()=>[await (await ocForm99(o)).save(),'Form 99.pdf']],['Itinerary (.docx)',async()=>[await ocItineraryDocx(o),'Itinerary.docx']],['FCG (.docx)',async()=>[await ocFcgDocx(o),'Foreign Clearance Guide Sections I and IV.docx']],['Advisories PDF',async()=>[await (await ocImagesPdf(OC_FILES.advisory,'Travel advisory')).save(),'Travel Advisories.pdf']],...named.map(c=>[`FP plan: ${c.name}`,async()=>[await (await ocFpPlan(o,c)).save(),`FP and Emergency Plan - ${c.name}.pdf`]])]
             .map(([l,fn])=>h('button',{class:'btn sm',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const [bytes,name]=await fn(); await saveAny(bytes,name);}catch(e){console.error(e);toast('Couldn’t build it: '+e.message)} b.disabled=false; }},l))))),
@@ -1685,13 +1713,11 @@ function leaderPanel(name){
   const sc=leaderScope(name); if(!sc) return null;
   const inScope=n=>sc.names.some(m=>sameName(m,n)); const tk=D('taskers/board'); const t=today();
   const rows=[]; if(tk) tk.columns.forEach(c=>{ const miss=[]; let done=0,tot=0; tk.groups.forEach(g=>g.people.forEach(p=>{ if(!(sc.group&&g.name===sc.group)&&!inScope(p.name)) return; const v=(tk.status[p.id]||{})[c.id]||''; if(!v) return; tot++; if(/^yes/i.test(v)) done++; else miss.push(`${p.rank} ${p.name}`); })); if(tot) rows.push({c,miss,done,tot,due:tkDue(c)}); });
-  const papers=(S.headsup||[]).filter(x=>inScope(x.from)).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
-  return h('div',{class:'panel',style:'border:2px solid var(--sun)'},h('h3',null,`Your ${sc.kind==='flight'?'flight':'division'}: ${sc.label}`),h('p',{class:'small muted',style:'margin-top:-4px'},`${sc.names.length} people. Tasker status and paperwork from your ${sc.kind==='flight'?'flight':'division'}.`),
+  return h('div',{class:'panel',style:'border:2px solid var(--sun)'},h('h3',null,`Your ${sc.kind==='flight'?'flight':'division'}: ${sc.label}`),h('p',{class:'small muted',style:'margin-top:-4px'},`${sc.names.length} people. Tasker status and who’s leaving on an eSSS from your ${sc.kind==='flight'?'flight':'division'}.`),
     h('div',{class:'grid2',style:'align-items:start'},
       h('div',null,h('h4',null,'Taskers'),rows.length?h('ul',{class:'list'},rows.map(r=>h('li',{style:'align-items:flex-start'},h('div',{class:'grow'},h('b',null,r.c.label),r.due?h('span',{class:'small',style:`color:${r.due<t&&r.miss.length?'var(--coral)':'var(--muted)'}`},` · due ${fmtShort(r.due)}`):null,
         r.miss.length?h('div',{class:'small muted'},'Not done: '+r.miss.join(', ')):h('div',{class:'small',style:'color:var(--mint)'},'Everyone’s done')),h('b',{class:'mono small'},`${r.done}/${r.tot}`)))):h('p',{class:'muted'},'No taskers for your people.')),
-      h('div',null,h('h4',null,'Paperwork log'),papers.length?h('div',{class:'stack',style:'gap:8px'},papers.slice(0,12).map(x=>{ const nx=nextSigner(x); return h('div',{class:'tl'},h('div',{class:'row'},h('span',{class:'chip Sent'},x.kind),h('b',null,x.from),suspenseChip(x.suspense),(x.status||'Active')!=='Active'?h('span',{class:'chip Approved'},x.status):null),h('div',{class:'small muted',style:'margin:2px 0 6px'},x.subject),
-        h('div',{class:'track'},x.routing.map((n,i)=>{ const dn=signedBy(x,n); return h('span',{class:'step'+(dn?' done':n===nx?' now':'')},h('i',null,dn?'✓':String(i+1)),stripCls(n)); }))); })):h('p',{class:'muted'},'No paperwork sent by your people yet.'))));
+      leaderOutPanel(sc)));
 }
 const KIND_LABEL={memo:'Memo / MFR',esss:'eSSS',f99:'Form 99',f174:'AF 174',f10:'Form 10',oconus:'OCONUS'};
 function myDraftsPanel(meCol){
@@ -1712,9 +1738,7 @@ VIEWS.me=function(){
         h('button',{class:'btn pri',onclick:async()=>{ const p=allPeople().find(x=>norm(x.name)===norm(st.pick)); if(!p) return toast('Pick your name from the list.'); try{ await S.db.doc(`data/users/${S.uid}/profile`).set({name:p.name}); }catch(e){ toast(e&&e.code==='invalid_argument'?'Your access level can’t save a personal page. Ask the Chief of Staff for Contributor or Editor access.':'That didn’t save. Try again.'); } }},'This is me'))));
   const me=(typeof identify==='function'&&identify())||allPeople().filter(p=>norm(p.name)===norm(name)).sort((a,b)=>!!(b.pos||'').trim()-!!(a.pos||'').trim())[0]||{name,rank:'',pos:''};
   const t=today();
-  const incoming=(S.headsup||[]).filter(x=>x.routing.some(n=>sameName(n,name))).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
-  const pending=incoming.filter(x=>!Object.keys(x.signed||{}).some(n=>sameName(n,name)));
-  const sent=(S.headsup||[]).filter(x=>sameName(x.from,name)).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
+  const myOut=signouts().filter(x=>sameName(x.name,name)&&x.ret>=t);
   const todos=(S.mine||[]).filter(d=>d.id.startsWith('todo_')).sort((a,b)=>(a.done-b.done)||(a.due||'9').localeCompare(b.due||'9'));
   const acts=(S.actions||[]).filter(a=>!a.done&&sameName(a.owner,name));
   const ldr=(S.ldr||[]).filter(x=>x.status!=='Done'&&sameName(x.assignee,name)).sort((a,b)=>(a.due||'9').localeCompare(b.due||'9'));
@@ -1723,13 +1747,11 @@ VIEWS.me=function(){
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
     head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
-    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'To sign'),h('div',{class:'v'},String(pending.length))),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
+    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
     myWeekPanel(name),
     h('div',{class:'grid2'},
-      h('div',{class:'panel'},h('h3',null,'Paperwork headed your way'),h('p',{class:'small muted',style:'margin-top:-4px'},'eSSSs and OCONUS packages where you’re in the approval chain. The signing still happens in Teams; mark it here when you’re done.'),
-        incoming.length?h('ul',{class:'list'},incoming.slice(0,15).map(x=>{ const done=Object.keys(x.signed||{}).some(n=>sameName(n,name)); const idx=x.routing.findIndex(n=>sameName(n,name)); const before=x.routing.slice(0,idx).filter(n=>!Object.keys(x.signed||{}).some(s=>sameName(s,n)));
-          return h('li',null,h('div',{class:'grow'},h('b',null,`${x.kind}: ${x.from}`),h('div',{class:'small muted'},[x.subject,x.extra].filter(Boolean).join(' · ')),h('div',{class:'small',style:`color:${done?'var(--mint)':before.length?'var(--muted)':'var(--coral)'}`},done?'You signed this':before.length?`Waiting on ${before.map(stripCls).join(', ')} first`:'Your turn to review')),
-            done?h('span',{class:'chip Approved'},'Signed'):h('button',{class:'btn sm',onclick:()=>upd('headsup/'+x.id,{signed:{[name]:new Date().toISOString()}})},'Mark signed')); })):h('p',{class:'muted'},'Nothing routed to you right now.')),
+      h('div',{class:'panel'},h('h3',null,'My eSSS trips'),h('p',{class:'small muted',style:'margin-top:-4px'},'Your upcoming trips on the eSSS tracker. They add themselves when you download an eSSS or OCONUS package (unless it’s a practice run).'),
+        myOut.length?h('ul',{class:'list'},myOut.map(x=>soLine(x))):h('p',{class:'muted'},'No upcoming eSSS trips.')),
       h('div',{class:'panel'},h('h3',null,'My to-dos'),
         h('div',{class:'row'},h('input',{type:'text',id:'metodo',placeholder:'Add a to-do…',style:'flex:1',value:st.todo,oninput:e=>st.todo=e.target.value,onkeydown:e=>{if(e.key==='Enter'){e.preventDefault();addTodo()}}}),h('input',{type:'date',id:'medue',style:'width:150px',value:st.due,oninput:e=>st.due=e.target.value}),h('button',{class:'btn pri',onclick:addTodo},'Add')),
         h('ul',{class:'list',style:'margin-top:8px'},
@@ -1743,9 +1765,7 @@ VIEWS.me=function(){
       h('div',{class:'panel'},h('h3',null,'My CQ shifts'),cq.length?h('ul',{class:'list'},cq.slice(0,10).map(x=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(x.date)),h('span',{class:'grow'},x.day),h('span',{class:'mono small'},x.time)))):h('p',{class:'muted'},'No upcoming CQ shifts with your name.'),h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{S.sub.duty='cq';go('duty')}},'CQ sign-up')),
       h('div',{class:'panel'},h('h3',null,'My SDO days'),sdo.length?h('ul',{class:'list'},sdo.slice(0,10).map(d=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(d)),h('span',{class:'grow'},new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'long'}))))):h('p',{class:'muted'},'No upcoming SDO days with your name.'))),
     leaderPanel(name),
-    myDraftsPanel(meCol),
-    sent.length?h('div',{class:'panel'},h('h3',null,'Paperwork I sent'),h('ul',{class:'list'},sent.slice(0,10).map(x=>{ const signed=x.routing.filter(n=>Object.keys(x.signed||{}).some(s=>sameName(s,n))); const next=x.routing.find(n=>!signed.includes(n));
-      return h('li',null,h('div',{class:'grow'},h('b',null,x.kind),' · ',x.subject,h('div',{class:'small muted'},next?`${signed.length}/${x.routing.length} signed · with ${stripCls(next)}`:'Everyone has signed')),(S.uid&&x.by===S.uid)?confirmBtn('×',()=>delDoc('headsup/'+x.id)):null); }))):null
+    myDraftsPanel(meCol)
   );
 };
 </script>
@@ -1827,7 +1847,7 @@ function paperworkTimeline(items,opts={}){
 function sqExec(){
   const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
   return h('div',{class:'stack'},
-    paperworkTimeline(S.headsup||[],{title:'Active paperwork timeline'}),
+    signoutCalendar(),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Weekly schedule for the Dozen Daily'),h('span',{class:'spacer'}),h('span',{class:'chip '+(age==null||age>6?'Returned':'Approved')},age==null?'Not updated on the site yet':age===0?'Updated today':`Updated ${age}d ago`)),
       h('p',{class:'small muted'},'Update this every week. It’s the schedule everyone sees on the Dozen Daily.'),
       h('div',{class:'stack'},outlookBlock()))
@@ -1903,14 +1923,13 @@ function sqSel(){
 /* ---- Squadron Commander ---- */
 function sqCC(){
   const r=D('roster/main'); const ccName=(allPeople().find(p=>/^Squadron Commander$/.test((p.pos||'').trim()))||{}).name||'';
-  const hs=(S.headsup||[]).filter(x=>(x.status||'Active')==='Active'&&nextSigner(x));
-  const mineNow=hs.filter(x=>sameName(nextSigner(x),ccName)); const g=coverageGaps(7); const ts=taskerStatus(); const disc=disciplineItems().filter(x=>x.status!=='Closed');
+  const so=signouts(); const t0=today(); const outNow=so.filter(x=>outOn(x,t0)); const wkEnd=iso(new Date(Date.now()+7*864e5)); const leaving=so.filter(x=>x.depart>t0&&x.depart<=wkEnd); const g=coverageGaps(7); const ts=taskerStatus(); const disc=disciplineItems().filter(x=>x.status!=='Closed');
   const wk=weekStart(today()); const dirt=(S.dirt||[]).filter(x=>(x.date||x.created||'').slice(0,10)>=wk);
   const tot=ts.reduce((a,x)=>a+x.total,0), done=ts.reduce((a,x)=>a+x.done,0);
   return h('div',{class:'stack'},
     leaderTaskPanel(['staff','div','flight'],'cc'),
-    h('div',{class:'kpis'},kpi('Waiting on C/Sq CC',String(mineNow.length),null,mineNow.length>0),kpi('Active paperwork',String(hs.length)),kpi('Open Form 10 / 174',String(disc.length)),kpi('Tasker completion',tot?Math.round(100*done/tot)+'%':'—'),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('DIRT this week',String(dirt.length))),
-    paperworkTimeline(mineNow,{title:`Waiting on ${stripCls(ccName)||'the C/Sq CC'}`,note:'Paperwork where the C/Sq CC is the next signer.'}),
+    h('div',{class:'kpis'},kpi('Out on eSSS today',String(outNow.length)),kpi('Leaving this week',String(leaving.length)),kpi('Open Form 10 / 174',String(disc.length)),kpi('Tasker completion',tot?Math.round(100*done/tot)+'%':'—'),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('DIRT this week',String(dirt.length))),
+    h('div',{class:'panel'},h('h3',null,'eSSS trips this week'),outNow.length||leaving.length?h('ul',{class:'list'},[...outNow,...leaving].map(x=>soLine(x,{unit:true,del:false}))):h('p',{class:'muted'},'No eSSS trips this week.')),
     h('div',{class:'panel'},h('h3',null,'Taskers behind'),ts.filter(x=>x.state==='overdue'||x.state==='soon').length?h('ul',{class:'list'},ts.filter(x=>x.state==='overdue'||x.state==='soon').map(x=>h('li',null,h('span',{class:'grow'},x.c.label),h('span',{class:'small muted'},`${x.missing.length} not done`),h('span',{class:'chip '+(x.state==='overdue'?'Returned':'Sent')},x.state==='overdue'?'Missed':'Due soon')))):h('p',{class:'muted'},'Nothing overdue or due this week.'))
   );
 }
@@ -1920,14 +1939,14 @@ function sqCoS(){
   const acts=(S.actions||[]).filter(a=>!a.done); const t=today();
   const byStaff={}; acts.forEach(a=>{ (byStaff[a.staff]=byStaff[a.staff]||[]).push(a); });
   const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
-  const hs=(S.headsup||[]).filter(x=>(x.status||'Active')==='Active'&&nextSigner(x)); const g=coverageGaps(7); const ts=taskerStatus();
+  const so=signouts(); const t0=today(); const outNow=so.filter(x=>outOn(x,t0)); const g=coverageGaps(7); const ts=taskerStatus();
   return h('div',{class:'stack'},
     leaderTaskPanel(['div'],'cos'),
     astaffEditor(),
-    h('div',{class:'kpis'},kpi('Open staff action items',String(acts.length)),kpi('Overdue items',String(acts.filter(a=>a.due&&a.due<t).length),null,acts.some(a=>a.due&&a.due<t)),kpi('Active paperwork',String(hs.length)),kpi('Dozen Daily schedule',age==null?'Not updated':age===0?'Today':age+'d old',site&&site.outlook&&site.outlook.updatedBy?'by '+site.outlook.updatedBy:null,age==null||age>6),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('Taskers missed',String(ts.filter(x=>x.state==='overdue').length),null,ts.some(x=>x.state==='overdue'))),
+    h('div',{class:'kpis'},kpi('Open staff action items',String(acts.length)),kpi('Overdue items',String(acts.filter(a=>a.due&&a.due<t).length),null,acts.some(a=>a.due&&a.due<t)),kpi('Out on eSSS today',String(outNow.length)),kpi('Dozen Daily schedule',age==null?'Not updated':age===0?'Today':age+'d old',site&&site.outlook&&site.outlook.updatedBy?'by '+site.outlook.updatedBy:null,age==null||age>6),kpi('Duty gaps this week',String(g.sdo.length+g.cq.length),null,g.sdo.length+g.cq.length>0),kpi('Taskers missed',String(ts.filter(x=>x.state==='overdue').length),null,ts.some(x=>x.state==='overdue'))),
     h('div',{class:'panel'},h('h3',null,'Staff action items'),
       Object.keys(byStaff).length?h('div',{class:'cols4'},Object.entries(byStaff).map(([st,list])=>h('div',null,h('h4',null,st),h('ul',{class:'list'},list.sort((a,b)=>(a.due||'9').localeCompare(b.due||'9')).map(a=>h('li',null,h('div',{class:'grow small'},a.title,h('div',{class:'muted'},[a.owner,a.due?'due '+fmtShort(a.due):''].filter(Boolean).join(' · '))),a.due&&a.due<t?h('span',{class:'chip Returned'},'Overdue'):null)))))):h('p',{class:'muted'},'No open action items on the Staffs tab.')),
-    paperworkTimeline(S.headsup||[],{title:'All active paperwork'})
+    h('div',{class:'panel'},h('h3',null,'Out on an eSSS today'),outNow.length?h('ul',{class:'list'},outNow.map(x=>soLine(x,{unit:true,del:false}))):h('p',{class:'muted'},'Nobody out on an eSSS today.'))
   );
 }
 </script>
@@ -1958,13 +1977,13 @@ function myProfile(name){
   const ents=allPeople().filter(p=>sameName(p.name,name)); const out={year:'',flight:'',divs:new Set(),cmd:false,cls:''};
   ents.forEach(p=>{
     if(!out.year&&classOf(p)){ out.year=classOf(p); out.cls=p.cls; }
-    const f=((p.flight||'')+' '+(p.section||'')).match(/Alpha|Bravo|Charlie/); if(f&&!out.flight) out.flight=f[0];
     const pos=p.pos||'', sec=p.section||'';
     if(/Command Staff/.test(sec)) out.cmd=true;
     if(/Squadron A-Staff/.test(sec)||/^Squadron A[1-4]/.test(pos)){ const a=pos.match(/A4\/A6|A4\/6|A[1-3]/); if(a) out.divs.add(divKey(a[0])); }
     if(/Stan\/Eval/.test(sec)||/Standardization/.test(pos)) out.divs.add('stan/eval');
     if(/Character and Honor/.test(pos)) out.divs.add('c&h');
   });
+  const u=unitOf(name); out.flight=u.kind==='flight'?u.key:'';
   return out;
 }
 const lines=c=>String(c||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
@@ -2111,6 +2130,107 @@ function sdoPasteBox(){
 }
 </script>
 <script>
+/* ================= eSSS TRACKER =================
+   Who is leaving on an eSSS (or OCONUS package) and when. Filled automatically when someone downloads one (unless they
+   untick it or mark it a practice run); staff can add one done outside the site. The Exec sees a calendar;
+   flight commanders and division chiefs see their people. Other ways of signing out aren't tracked here. */
+
+// Which chain someone belongs to. A flight's own roster section wins; otherwise their staff section decides
+// (A-staff division, Stan/Eval, Squadron/Special Staff, Group/Wing). The spreadsheet's "Flight" column only
+// counts for people who aren't in any section that has a chain.
+function unitOf(name){
+  const ents=allPeople().filter(p=>sameName(p.name,name)); if(!ents.length) return {kind:'',key:'',label:''};
+  const fl=ents.find(p=>/^(Alpha|Bravo|Charlie|Delta) Flight$/.test(p.section||''));
+  if(fl){ const k=fl.section.split(' ')[0]; return {kind:'flight',key:k,label:k+' Flight'}; }
+  for(const p of ents){ const pos=(p.pos||'').trim(), sec=p.section||'';
+    if(/Command Staff/.test(sec)) return {kind:'cmd',key:'SQ',label:'Squadron Staff'};
+    const a=pos.match(/^Squadron (A1|A2|A3|A4\/A6)\b/); if(a) { const k=a[1].replace('A4/A6','A4/6'); return {kind:'div',key:k,label:k+' division'}; }
+    if(/Stan\/Eval/.test(sec)||/Standardization/.test(pos)) return {kind:'div',key:'Stan/Eval',label:'Stan/Eval'};
+    if(/A-Staff/.test(sec)) return {kind:'div',key:'A-Staff',label:'A-Staff'};
+    if(/Special Staff/.test(sec)) return {kind:'special',key:'SQ',label:'Squadron Special Staff'};
+    if(/Group\/Wing/.test(sec)) return {kind:'gw',key:'GW',label:'Group/Wing Staff'};
+  }
+  const f=((ents[0].flight||'')+' ').match(/Alpha|Bravo|Charlie|Delta/); if(f) return {kind:'flight',key:f[0],label:f[0]+' Flight'};
+  return {kind:'',key:'',label:''};
+}
+// eSSS / OCONUS routing option for that chain
+function routeCodeOf(name){ const u=unitOf(name); return u.kind==='flight'?u.key[0]:u.kind==='div'?({'A4/6':'A46','Stan/Eval':'SE','A-Staff':'A3'}[u.key]||u.key):u.kind==='gw'?'GW':u.kind?'SQ':''; }
+
+const SO_KINDS=['eSSS','OCONUS'];
+// read "11/20–11/23 Austin, Texas" from older paperwork notices
+function legacyTrips(){ return (S.headsup||[]).filter(x=>/eSSS|OCONUS/.test(x.kind)&&/^\d{4}-\d{2}-\d{2}$/.test(x.suspense||'')).map(x=>{
+  const m=/(\d{1,2})\/(\d{1,2})\s*[–-]\s*(\d{1,2})\/(\d{1,2})\s*(.*)$/.exec(x.extra||''); let ret=x.suspense, where='';
+  if(m){ const y=+x.suspense.slice(0,4); let r=new Date(y,+m[3]-1,+m[4],12); if(r<new Date(x.suspense+'T00:00')) r.setFullYear(y+1); ret=iso(r); where=m[5].trim(); } else where=x.extra||'';
+  return {id:'hs_'+x.id,name:flOf(stripCls(x.from)),kind:x.kind,depart:x.suspense,ret,where,legacy:true,by:x.by}; }); }
+function signouts(){ const list=(S.signout||[]).filter(x=>x.name&&/^\d{4}-\d{2}-\d{2}$/.test(x.depart)).map(x=>({...x,ret:/^\d{4}-\d{2}-\d{2}$/.test(x.ret)&&x.ret>=x.depart?x.ret:x.depart}));
+  const seen=new Set(list.map(x=>norm(x.name)+'|'+x.depart));
+  return list.concat(legacyTrips().filter(x=>!seen.has(norm(x.name)+'|'+x.depart))).sort((a,b)=>a.depart.localeCompare(b.depart)||a.name.localeCompare(b.name)); }
+const outOn=(x,d)=>x.depart<=d&&d<=x.ret;
+// save a trip to the log (one entry per person per departure date, so downloading again just updates it)
+async function logSignout(t){
+  if(!S.db) return false; const name=flOf(t.name||''); if(!name||!/^\d{4}-\d{2}-\d{2}$/.test(t.depart||'')) return false;
+  const ret=/^\d{4}-\d{2}-\d{2}$/.test(t.ret||'')&&t.ret>=t.depart?t.ret:t.depart; const u=unitOf(name);
+  const id='so_'+(t.mine===false?uid():(S.uid||'x').slice(0,28))+'_'+t.depart.replace(/-/g,'');
+  return setDoc('signout/'+id,{name,kind:t.kind||'Other',depart:t.depart,ret,departTime:(t.departTime||'').slice(0,20),retTime:(t.retTime||'').slice(0,20),where:(t.where||'').slice(0,120),note:(t.note||'').slice(0,200),unit:u.label,created:new Date().toISOString(),by:S.uid||null});
+}
+// replaces the old "heads-up to my chain": the builders now log the trip dates instead
+async function sendHeadsUp(){ }
+function soLine(x,opts={}){ const y=personYear(x.name); const t=today(); const now=outOn(x,t);
+  const can=!x.legacy&&(S.canEdit||(S.uid&&(x.by===S.uid||(x.id||'').startsWith('so_'+S.uid.slice(0,28)))));
+  return h('li',null,nameDot(x.name),h('div',{class:'grow'},h('b',null,x.name),opts.unit&&x.unit?h('span',{class:'small muted'},' · '+x.unit):null,
+      h('div',{class:'small muted'},[`${fmtShort(x.depart)}${x.departTime?' '+x.departTime:''} → ${fmtShort(x.ret)}${x.retTime?' '+x.retTime:''}`,x.kind,x.where].filter(Boolean).join(' · '))),
+    now?h('span',{class:'chip Returned'},'Out now'):x.depart>t?h('span',{class:'chip Sent'},`in ${daysTo(x.depart)}d`):null,
+    can&&opts.del!==false?confirmBtn('×',()=>delDoc('signout/'+x.id)):null); }
+function soForm(st,forOthers){
+  const save=async()=>{ const name=forOthers?st.name:myName(); if(!flOf(name)) return toast('Pick a name.'); if(!st.depart) return toast('Add the departure date.'); if(st.ret&&st.ret<st.depart) return toast('Return can’t be before departure.');
+    if(await logSignout({name,depart:st.depart,ret:st.ret,where:st.where,kind:st.kind,departTime:st.dt,retTime:st.rt,mine:!forOthers})){ toast('Added to the eSSS tracker'); Object.assign(st,{name:'',depart:'',ret:'',where:'',dt:'',rt:''}); render(); } };
+  return h('details',{class:'box',style:'margin-top:10px',open:!!st.open,ontoggle:e=>st.open=e.target.open},h('summary',null,'Add an eSSS done outside the site'),
+    h('div',{class:'fgrid',style:'margin-top:10px'},
+      forOthers?h('label',{class:'f'},'Name',h('input',{type:'text',id:'soname',list:'sonames',value:st.name||'',oninput:e=>st.name=e.target.value}),nameDatalist('sonames')):null,
+      fld(st,'depart','Leaving',{type:'date',id:forOthers?'sodx':'sod'}),fld(st,'dt','Time',{id:forOthers?'sotx':'sot',ph:'1530'}),
+      fld(st,'ret','Back',{type:'date',id:forOthers?'sorx':'sor'}),fld(st,'rt','Time',{id:forOthers?'sortx':'sort',ph:'before TAPS'}),
+      fld(st,'where','Where',{id:forOthers?'sowx':'sow',ph:'Denver, CO'}),fld(st,'kind','Type',{type:'select',options:SO_KINDS,id:forOthers?'sokx':'sok',onchange:()=>{}})),
+    h('button',{class:'btn pri',style:'margin-top:8px',onclick:save},'Add to the eSSS tracker'));
+}
+
+/* ---------- Exec: sign-out calendar ---------- */
+function signoutCalendar(){
+  const st=S.edit.soCal||(S.edit.soCal={month:today().slice(0,7),day:today(),form:{kind:'eSSS'}});
+  const all=signouts(); const t=today(); const [y,m]=st.month.split('-').map(Number);
+  const first=new Date(y,m-1,1,12); const start=new Date(first); start.setDate(1-first.getDay());
+  const cells=[]; for(let i=0;i<42;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const k=iso(d); if(i>=35&&d.getMonth()!==m-1) break;
+    const out=all.filter(x=>outOn(x,k)); const leaving=out.filter(x=>x.depart===k).length;
+    cells.push(h('button',{type:'button',class:'sod'+(d.getMonth()!==m-1?' out':'')+(k===t?' today':'')+(k===st.day?' sel':''),onclick:()=>{ st.day=k; render(); }},
+      h('span',{class:'n'},d.getDate()),out.length?h('span',{class:'socount'+(out.length>=8?' hi':'')},String(out.length)):null,
+      h('span',{class:'sonames'},out.slice(0,3).map(x=>h('span',null,nameDot(x.name),x.name.split(' ').slice(-1)[0])),out.length>3?h('span',{class:'muted'},'+'+(out.length-3)):null),
+      leaving?h('span',{class:'soleave'},`${leaving} leaving`):null)); }
+  const shift=n=>{ const d=new Date(y,m-1+n,1); st.month=d.getFullYear()+'-'+pad(d.getMonth()+1); render(); };
+  const dayList=all.filter(x=>outOn(x,st.day)); const soon=all.filter(x=>x.depart>=t&&daysTo(x.depart)<=14);
+  const byUnit={}; dayList.forEach(x=>{ const u=x.unit||unitOf(x.name).label||'Other'; (byUnit[u]=byUnit[u]||[]).push(x); });
+  return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'eSSS tracker'),h('span',{class:'spacer'}),
+      h('button',{class:'btn sm',onclick:()=>shift(-1),'aria-label':'Previous month'},'‹'),h('b',null,MONTHS[m-1]+' '+y),h('button',{class:'btn sm',onclick:()=>shift(1),'aria-label':'Next month'},'›')),
+    h('p',{class:'small muted',style:'margin:4px 0 10px'},'Everyone leaving on an eSSS or OCONUS package, by date. Trips land here when someone downloads their eSSS (practice runs are left out). Click a day to see who’s gone.'),
+    h('div',{class:'socal'},['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>h('div',{class:'dn'},d)),cells),
+    h('div',{class:'grid2',style:'margin-top:12px;align-items:start'},
+      h('div',null,h('h4',null,`Out on ${new Date(st.day+'T12:00').toLocaleDateString('en-US',{weekday:'long',day:'numeric',month:'short'})} (${dayList.length})`),
+        dayList.length?Object.entries(byUnit).sort().map(([u,l])=>h('div',null,h('div',{class:'small muted',style:'margin:6px 0 2px;font-weight:700'},u+' · '+l.length),h('ul',{class:'list'},l.map(x=>soLine(x))))):h('p',{class:'muted'},'Nobody out on an eSSS.')),
+      h('div',null,h('h4',null,`Leaving in the next 2 weeks (${soon.length})`),soon.length?h('ul',{class:'list'},soon.slice(0,30).map(x=>soLine(x,{unit:true}))):h('p',{class:'muted'},'No departures logged.'),
+        S.canEdit?soForm(st.form,true):null)));
+}
+
+/* ---------- flight commanders / division chiefs ---------- */
+function leaderOutPanel(sc){
+  const t=today(); const inScope=n=>sc.names.some(m=>sameName(m,n)); const end=iso(new Date(Date.now()+14*864e5));
+  const mine=signouts().filter(x=>inScope(x.name)&&x.ret>=t&&x.depart<=end);
+  const nowOut=mine.filter(x=>outOn(x,t)); const leaving=mine.filter(x=>x.depart>t);
+  const names=l=>[...new Set(l.map(x=>x.name))];
+  return h('div',null,h('h4',null,'Leaving in the next 2 weeks'),
+    leaving.length?h('div',{class:'banner warn',style:'margin-bottom:8px'},h('b',null,`${names(leaving).length} from your ${sc.kind==='flight'?'flight':'division'}: `),names(leaving).join(', ')):h('p',{class:'muted',style:'margin:0 0 8px'},'Nobody from your '+(sc.kind==='flight'?'flight':'division')+' is leaving on an eSSS in the next 2 weeks.'),
+    nowOut.length?h('div',{class:'small',style:'margin-bottom:6px'},h('b',null,'Out now: '),names(nowOut).join(', ')):null,
+    mine.length?h('ul',{class:'list'},mine.map(x=>soLine(x,{del:false}))):null);
+}
+</script>
+<script>
 /* ================= A4/6 (passcode-encrypted) ================= */
 const V={key:null,data:null,err:'',busy:false,lastCt:null};
 const b64=u8=>btoa(String.fromCharCode(...new Uint8Array(u8)));
@@ -2131,8 +2251,14 @@ const FIN={
   store:{limit:1000,rules:['Unit unofficial activity fund: the bank account limit is $1,000. You can go over temporarily, for no longer than 6 months.','Two fundraisers per year (car washes, bake sales, swag sales). For us, by us.','No advertising off base (online is OK). No soliciting gift funds or off-base fundraising. Can’t compete with AAFES.','Not during duty hours or in uniform.']},
   s889:{misc:['Amazon.com LLC (shipped AND sold by Amazon)','Home Depot (online & in-store)','Lowe’s (online & in-store)','Michael’s (Chapel Hills West only)','Blackstone','4Imprint','Aviator Gear','Next Day Display','Anley','Lapel Pins Plus'],food:['Cracker Barrel (outside S Gate)','Chick-fil-A (Spectrum Loop)','Little Caesar’s (Hartsel Dr)','O’Malley’s (Hwy 105)','Panda Express (Interquest)','Torchy’s Tacos (Interquest)','Raising Cane’s (N Academy)','Buffalo Wild Wings (N Academy)','Walmart (Razorback, in store only)','King Soopers']}
 };
-function vaultDefaults(){ return {settings:{rates:{breakfast:5,lunch:7,dinner:9},cap:2000,poc:'Jeannie Schroeder',pocEmail:'jeannie.schroeder@us.af.mil',cc:'10FSS.FSR.NAFDisbursement@us.af.mil',mhLead:10,directLead:15,groupDays:15,receiptsDays:1,lastEvent:'2027-05-16',venueAlloc:9000,confirmed:true},cul:[],gift:{ledger:[]},om:{budget:7000,budgetNote:'',items:[]},smw:{events:[]},store:{months:[],costs:[],income:[],note:''},vendors:[],imports:[]}; }
-function vaultNormalize(v){ const d=vaultDefaults(); for(const k in d) if(v[k]==null) v[k]=d[k]; v.settings={...d.settings,...v.settings}; if(v.settings.lead!=null&&v.settings.mhLead==null) v.settings.mhLead=v.settings.lead; return v; }
+function vaultDefaults(){ return {settings:{rates:{breakfast:5,lunch:7,dinner:9},cap:2000,poc:'Jeannie Schroeder',pocEmail:'jeannie.schroeder@us.af.mil',cc:'10FSS.FSR.NAFDisbursement@us.af.mil',mhLead:10,directLead:15,groupDays:15,receiptsDays:1,lastEvent:'2027-05-16',venueAlloc:9000,confirmed:true},cul:[],gift:{ledger:[]},om:{budget:7000,budgetNote:'',items:[]},smw:{events:[]},store:{months:[],costs:[],income:[],note:''},vendors:[],imports:[],plan:[]}; }
+function vaultNormalize(v){ if(!v||typeof v!=='object'||Array.isArray(v)) v={}; const d=vaultDefaults(); for(const k in d) if(v[k]==null) v[k]=d[k];
+  // repair the finance data's structure on unlock, so one bad record can't break the A4/6 tab
+  const objs=x=>Array.isArray(x)?x.filter(o=>o&&typeof o==='object'&&!Array.isArray(o)):[]; const obj=x=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
+  v.cul=objs(v.cul); v.vendors=objs(v.vendors); v.plan=objs(v.plan); v.imports=Array.isArray(v.imports)?v.imports:[];
+  v.om=obj(v.om); v.om.items=objs(v.om.items); v.gift=obj(v.gift); v.gift.ledger=objs(v.gift.ledger); v.smw=obj(v.smw); v.smw.events=objs(v.smw.events);
+  v.store=obj(v.store); ['months','costs','income'].forEach(k=>v.store[k]=objs(v.store[k])); v.settings=obj(v.settings); v.settings.rates={...d.settings.rates,...obj(v.settings.rates)};
+  v.cul.forEach(r=>{ if(!Array.isArray(r.items)) r.items=[]; }); v.settings={...d.settings,...v.settings}; if(v.settings.lead!=null&&v.settings.mhLead==null) v.settings.mhLead=v.settings.lead; return v; }
 async function vaultApplyImport(){ // merge staff-only finance imports staged by Claude, then delete the staging doc
   const imp=D('staff/a46import'); if(!V.key||!V.data||!imp||!imp.id||(V.data.imports||[]).includes(imp.id)) return;
   await vaultSave(v=>{
@@ -2158,7 +2284,7 @@ async function vaultSave(mut){
     mut(data); const enc=await vEncrypt(V.key,data); saved={data,ct:enc.ct}; return {v:1,salt:cur.salt,...enc,updated:new Date().toISOString()}; });
   if(ok&&saved){ V.data=saved.data; V.lastCt=saved.ct; render(); }
 }
-const A46_TABS=[['overview','Overview'],['cul','CUL'],['om','O&M'],['gift','SUPT gift funds'],['smw','SM&W'],['store','Squad funds'],['vendors','Vendors'],['settings','Settings']];
+const A46_TABS=[['overview','Overview'],['plan','Budget calendar'],['cul','CUL'],['om','O&M'],['gift','SUPT gift funds'],['smw','SM&W'],['store','Squad funds'],['vendors','Vendors'],['settings','Settings']];
 VIEWS.a46=function(){
   const d=D('a46/vault');
   if(S.nodb) return emptyState('Sign in to use the A4/6 tools.');
@@ -2166,7 +2292,7 @@ VIEWS.a46=function(){
   if(!V.key||!V.data) return a46Lock(d);
   vaultSync();
   const [cur,segEl]=seg('a46',A46_TABS,'overview');
-  const body={overview:a46Overview,cul:a46Cul,om:a46Om,gift:a46Gift,smw:a46Smw,store:a46Store,vendors:a46Vendors,settings:a46Settings}[cur]||a46Overview;
+  const body={plan:a46Plan,overview:a46Overview,cul:a46Cul,om:a46Om,gift:a46Gift,smw:a46Smw,store:a46Store,vendors:a46Vendors,settings:a46Settings}[cur]||a46Overview;
   return h('div',{class:'stack'},
     head('A4/6 Finance','Every CS12 fund in one place. Everything on this tab is encrypted with the A4/6 passcode.',h('button',{class:'btn',onclick:()=>{V.key=null;V.data=null;V.lastCt=null;render()}},'Lock')),
     h('div',{class:'row'},segEl), body());
@@ -2214,6 +2340,7 @@ function a46Overview(){
   const planned=V.data.cul.filter(r=>r.status==='Planned'||r.status==='Draft');
   const card=(title,tab,kids)=>h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},title),h('span',{class:'spacer'}),h('button',{class:'btn sm',onclick:()=>{S.sub.a46=tab;ls('sub',S.sub);render()}},'Open')),h('div',{style:'margin-top:10px'},kids));
   return h('div',{class:'stack'},
+    trackerPanel(),
     h('div',{class:'grid2'},
       card('CUL funds','cul',[h('div',{class:'kpis'},kpi('Remaining',money(s.cap-used),`of ${money(s.cap)}, use by ${fmtShort(s.lastEvent)}`,s.cap-used<100),kpi('Committed',money(used))),
         h('div',{class:'bar'},h('i',{style:`width:${Math.min(100,100*used/s.cap)}%;background:${used>s.cap*.85?'var(--coral)':'var(--mint)'}`})),
@@ -2512,6 +2639,118 @@ function a46Settings(){
       h('div',{class:'fgrid'},h('label',{class:'f'},'New passcode',h('input',{type:'password',id:'pcn',autocomplete:'new-password',value:pc.p,oninput:e=>pc.p=e.target.value})),h('label',{class:'f'},'Confirm',h('input',{type:'password',id:'pcn2',autocomplete:'new-password',value:pc.p2,oninput:e=>pc.p2=e.target.value}))),
       h('button',{class:'btn',style:'margin-top:10px',onclick:async()=>{ if(pc.p.length<8) return toast('Use at least 8 characters.'); if(pc.p!==pc.p2) return toast('The passcodes don’t match.'); const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKey(pc.p,salt); const enc=await vEncrypt(key,V.data); if(await setDoc('a46/vault',{v:1,salt:b64(salt),...enc,updated:new Date().toISOString()})){ V.key=key; V.lastCt=enc.ct; S.edit.pc=null; toast('Passcode changed'); render(); } }},'Change passcode'))
   );
+}
+</script>
+<script>
+/* ================= A4/6: PAPERWORK TRACKER + BUDGET CALENDAR =================
+   Every request across CUL, O&M, SUPT gift funds and SM&W in one list, each with its stage, its process-by
+   date and a countdown. Plus a strategic budgeting calendar for planned spending. All of it lives inside the
+   encrypted A4/6 vault. */
+const STAGES=['Drafting','Awaiting PP approval','Awaiting Group/other approval','Approved'];
+const STAGE_CHIP={'Drafting':'Draft','Awaiting PP approval':'Sent','Awaiting Group/other approval':'Returned','Approved':'Approved'};
+const FUND_COLOR={'CUL':'var(--y3)','O&M':'var(--y0)','Gift funds':'var(--mint)','SM&W':'var(--y2)','Squad funds':'var(--y1)'};
+function minusWorkdays(isoD,n){ const d=new Date(isoD+'T12:00'); let k=0; while(k<n){ d.setDate(d.getDate()-1); const w=d.getDay(); if(w&&w<6) k++; } return iso(d); }
+function minusDays(isoD,n){ const d=new Date(isoD+'T12:00'); d.setDate(d.getDate()-n); return iso(d); }
+const arrOf=x=>Array.isArray(x)?x.filter(o=>o&&typeof o==='object'):[];
+const okDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||'');
+// one row per request; stage and due date can be set by hand, otherwise they come from the fund's own status and rules
+function trackItems(){
+  const v=V.data, s=v.settings, out=[];
+  arrOf(v.cul).filter(r=>r.status!=='Cancelled').forEach(r=>{
+    const auto=r.status==='Draft'||r.status==='Planned'?'Drafting':r.status==='Submitted'?'Awaiting PP approval':'Approved';
+    let due='', why='';
+    if(okDate(r.date)){ const g=minusDays(r.date,+s.groupDays||15), mh=minusWorkdays(r.date,r.pay==='direct'?(+s.directLead||15):(+s.mhLead||10)); due=g<mh?g:mh; why=g<mh?`Group POC needs it ${s.groupDays} days before the event`:`Mitchell Hall needs ${r.pay==='direct'?s.directLead:s.mhLead} workdays`; }
+    let amt=0; try{ amt=culCalc(r,s).authorized||(+r.est||0); }catch(e){ amt=+r.est||0; }
+    out.push({fund:'CUL',list:'cul',id:r.id,title:String(r.event||'(untitled CUL event)'),date:okDate(r.date)?r.date:'',amount:amt,stage:r.stage||auto,due:r.dueBy||due,why:r.dueBy?'set by hand':why,status:r.status}); });
+  arrOf(v.om&&v.om.items).filter(i=>i.status!=='Cancelled').forEach(i=>{
+    const auto=i.status==='Proposed'?'Drafting':i.status==='In work'?'Awaiting PP approval':'Approved';
+    const due=okDate(i.needed)?minusDays(i.needed,14):'';
+    out.push({fund:'O&M',list:'om',id:i.id,title:i.item||'(untitled O&M item)',date:okDate(i.needed)?i.needed:'',amount:(+i.qty||0)*(+i.avg||0),stage:i.stage||auto,due:i.dueBy||due,why:i.dueBy?'set by hand':due?'2 weeks before it’s needed (cardholder + MRR)':'',status:i.status}); });
+  arrOf(v.gift&&v.gift.ledger).filter(x=>x.kind!=='deposit'&&x.status!=='Cancelled').forEach(x=>{
+    const auto=x.status==='Requested'?'Awaiting PP approval':'Approved'; const ev=okDate(x.eventDate)?x.eventDate:'';
+    const due=okDate(ev)?minusDays(ev,14):'';
+    out.push({fund:'Gift funds',list:'gift',id:x.id,title:x.item||x.purpose||'(gift fund request)',date:ev,amount:+x.amount||0,stage:x.stage||auto,due:x.dueBy||due,why:x.dueBy?'set by hand':due?'2 weeks before the event':'',status:x.status}); });
+  arrOf(v.smw&&v.smw.events).forEach(x=>{
+    const due=okDate(x.date)?minusDays(x.date,14):'';
+    out.push({fund:'SM&W',list:'smw',id:x.id,title:String(x.desc||'(SM&W event)'),date:okDate(x.date)?x.date:'',amount:+x.amount||0,stage:x.stage||'Drafting',due:x.dueBy||due,why:x.dueBy?'set by hand':due?'Sq/CC needs it 14 days ahead (FSS 10)':'',status:''}); });
+  return out;
+}
+function trackFind(v,list,id){ const arr=list==='cul'?v.cul:list==='om'?v.om.items:list==='gift'?v.gift.ledger:v.smw.events; return arr.find(x=>x.id===id); }
+function countdown(it){
+  const t=today();
+  if(it.stage==='Approved') return h('span',{class:'chip Approved'},'Approved');
+  if(!it.due) return h('span',{class:'chip Draft'},'Set a due date');
+  const n=daysTo(it.due);
+  if(n<0) return h('span',{class:'cd cd-late'},`Overdue ${-n}d`);
+  if(n===0) return h('span',{class:'cd cd-late'},'Due today');
+  return h('span',{class:'cd '+(n<=3?'cd-hot':n<=7?'cd-warm':'cd-ok')},`${n} day${n===1?'':'s'} left`);
+}
+function trackerPanel(){
+  const st=S.edit.trk||(S.edit.trk={show:'active'}); const t=today();
+  let items=trackItems();
+  const active=items.filter(x=>x.stage!=='Approved'||(okDate(x.date)&&x.date>=t));
+  if(st.show==='active') items=active;
+  items.sort((a,b)=>(a.stage==='Approved')-(b.stage==='Approved')||(a.due||'9999').localeCompare(b.due||'9999'));
+  const setStage=(it,val)=>vaultSave(v=>{ const x=trackFind(v,it.list,it.id); if(x) x.stage=val; });
+  const setDue=(it,val)=>vaultSave(v=>{ const x=trackFind(v,it.list,it.id); if(x){ if(val) x.dueBy=val; else delete x.dueBy; } });
+  const open=it=>{ S.sub.a46=it.list; ls('sub',S.sub); render(); };
+  const late=active.filter(x=>x.stage!=='Approved'&&x.due&&x.due<t), week=active.filter(x=>x.stage!=='Approved'&&x.due&&x.due>=t&&daysTo(x.due)<=7);
+  return h('div',{class:'panel',style:'border:2px solid var(--sun)'},
+    h('div',{class:'row'},h('h3',{style:'margin:0'},'Paperwork tracker'),h('span',{class:'spacer'}),h('div',{class:'seg'},[['active','Active'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(st.show===k),onclick:()=>{st.show=k;render()}},l)))),
+    h('p',{class:'small muted',style:'margin:4px 0 10px'},'Every request across CUL, O&M, gift funds and SM&W. "Process by" is the last day to submit it so it clears in time: worked out from the fund’s rules, or set your own.'),
+    h('div',{class:'kpis'},kpi('Overdue',String(late.length),null,late.length>0),kpi('Due in 7 days',String(week.length),null,week.length>0),kpi('Awaiting PP',String(active.filter(x=>x.stage==='Awaiting PP approval').length)),kpi('Awaiting Group/other',String(active.filter(x=>x.stage==='Awaiting Group/other approval').length))),
+    items.length?h('div',{class:'tw',style:'margin-top:10px'},h('table',{class:'t trk'},h('thead',null,h('tr',null,['Countdown','Fund','Request','Event / needed','Amount','Stage','Process by',''].map(x=>h('th',null,x)))),
+      h('tbody',null,items.map(it=>h('tr',{class:it.stage!=='Approved'&&it.due&&it.due<t?'late':null},
+        h('td',null,countdown(it)),h('td',null,h('span',{class:'fund',style:`--fc:${FUND_COLOR[it.fund]||'var(--line)'}`},it.fund)),
+        h('td',{style:'font-weight:600;min-width:180px'},it.title),h('td',{class:'mono small'},it.date?fmtShort(it.date):'—'),h('td',{class:'num mono small'},it.amount?money(it.amount):'—'),
+        h('td',null,h('select',{'aria-label':'Stage for '+it.title,class:'stage s-'+STAGE_CHIP[it.stage],onchange:e=>setStage(it,e.target.value)},STAGES.map(sg=>{ const o=h('option',{value:sg},sg); if(sg===it.stage) o.selected=true; return o; }))),
+        h('td',null,h('input',{type:'date',value:it.due||'','aria-label':'Process by for '+it.title,style:'width:140px;padding:3px 6px',onchange:e=>setDue(it,e.target.value)}),it.why?h('div',{class:'small muted',style:'max-width:200px'},it.why):null),
+        h('td',null,h('button',{class:'btn sm',onclick:()=>open(it)},'Open'))))))):h('p',{class:'muted',style:'margin-top:10px'},st.show==='active'?'Nothing in progress. Switch to All to see finished requests.':'No requests yet.'));
+}
+
+/* ---------- strategic budgeting calendar ---------- */
+const PLAN_FUNDS=['CUL','O&M','Gift funds','SM&W','Squad funds'];
+function planRemaining(){ const s=V.data.settings; const g=giftTotals(), o=omTotals(), st=storeTotals();
+  return {'CUL':s.cap-culUsed(),'O&M':o.remEst,'Gift funds':g.after,'SM&W':null,'Squad funds':st.last?+st.last.balance:null}; }
+function a46Plan(){
+  const st=S.edit.plan||(S.edit.plan={month:today().slice(0,7),f:{date:'',title:'',fund:'CUL',amount:'',note:''},day:null});
+  const t=today(); const plan=arrOf(V.data.plan).filter(p=>okDate(p.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  // requests already in the tracker show on the calendar too, so nothing is counted twice by hand
+  const fromReq=trackItems().filter(x=>okDate(x.date)&&x.date>=t.slice(0,8)+'01'&&x.stage!=='Approved'||okDate(x.date)&&x.date>=t).map(x=>({id:'r_'+x.list+'_'+x.id,date:x.date,title:x.title,fund:x.fund,amount:x.amount,req:true,stage:x.stage,due:x.due}));
+  const all=plan.concat(fromReq).filter((x,i,a)=>a.findIndex(y=>y.id===x.id)===i);
+  const [y,m]=st.month.split('-').map(Number); const first=new Date(y,m-1,1,12); const start=new Date(first); start.setDate(1-first.getDay());
+  const cells=[]; for(let i=0;i<42;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const k=iso(d); if(i>=35&&d.getMonth()!==m-1) break;
+    const evs=all.filter(x=>x.date===k); const dues=fromReq.filter(x=>x.due===k);
+    cells.push(h('button',{type:'button',class:'sod'+(d.getMonth()!==m-1?' out':'')+(k===t?' today':'')+(k===st.day?' sel':''),onclick:()=>{ st.day=k; st.f.date=k; render(); }},h('span',{class:'n'},d.getDate()),
+      evs.slice(0,3).map(x=>h('span',{class:'pev'+(x.req?' req':''),style:`--fc:${FUND_COLOR[x.fund]||'var(--line)'}`},x.title)),evs.length>3?h('span',{class:'muted',style:'font-size:10.5px'},'+'+(evs.length-3)):null,
+      dues.map(x=>h('span',{class:'pdue'},'⏰ '+x.title)))); }
+  const shift=n=>{ const d=new Date(y,m-1+n,1); st.month=d.getFullYear()+'-'+pad(d.getMonth()+1); render(); };
+  const monthKey=st.month; const inMonth=all.filter(x=>x.date.slice(0,7)===monthKey);
+  const byFund={}; inMonth.forEach(x=>{ byFund[x.fund]=(byFund[x.fund]||0)+(+x.amount||0); });
+  const future=all.filter(x=>x.date>=t); const futByFund={}; future.forEach(x=>{ futByFund[x.fund]=(futByFund[x.fund]||0)+(+x.amount||0); });
+  const rem=planRemaining();
+  const add=async()=>{ const f=st.f; if(!okDate(f.date)) return toast('Pick a date.'); if(!f.title.trim()) return toast('Name the expense.');
+    await vaultSave(v=>{ v.plan=v.plan||[]; v.plan.push({id:uid(),date:f.date,title:f.title.trim().slice(0,120),fund:f.fund,amount:+f.amount||0,note:(f.note||'').slice(0,300)}); });
+    st.f={date:f.date,title:'',fund:f.fund,amount:'',note:''}; toast('Added to the budget calendar'); };
+  const dayItems=st.day?all.filter(x=>x.date===st.day):[];
+  return h('div',{class:'stack'},
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Budget calendar'),h('span',{class:'spacer'}),
+        h('button',{class:'btn sm',onclick:()=>shift(-1),'aria-label':'Previous month'},'‹'),h('b',null,MONTHS[m-1]+' '+y),h('button',{class:'btn sm',onclick:()=>shift(1),'aria-label':'Next month'},'›')),
+      h('p',{class:'small muted',style:'margin:4px 0 8px'},'Plan spending ahead so nothing surprises the funds. Solid bars are planned spending you add; outlined bars are requests already in the paperwork tracker; ⏰ marks a process-by date. Click a day to add to it.'),
+      h('div',{class:'row small'},PLAN_FUNDS.map(f=>h('span',{class:'fund',style:`--fc:${FUND_COLOR[f]}`},f))),
+      h('div',{class:'socal',style:'margin-top:8px'},['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>h('div',{class:'dn'},d)),cells)),
+    h('div',{class:'grid2',style:'align-items:start'},
+      h('div',{class:'panel'},h('h3',null,'Planned vs. what’s left'),
+        h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,['Fund',MONTHS[m-1],'All upcoming','Left now','After plans'].map(x=>h('th',null,x)))),
+          h('tbody',null,PLAN_FUNDS.map(f=>{ const after=rem[f]==null?null:rem[f]-(futByFund[f]||0); return h('tr',null,h('td',null,h('span',{class:'fund',style:`--fc:${FUND_COLOR[f]}`},f)),h('td',{class:'num mono small'},byFund[f]?money(byFund[f]):'—'),h('td',{class:'num mono small'},futByFund[f]?money(futByFund[f]):'—'),
+            h('td',{class:'num mono small'},rem[f]==null?'—':money(rem[f])),h('td',{class:'num mono small',style:after!=null&&after<0?'color:var(--coral);font-weight:700':''},after==null?'—':money(after))); })))),
+        h('p',{class:'small muted',style:'margin:8px 0 0'},'"After plans" subtracts every upcoming planned expense and open request from what’s left. Red means the plans don’t fit.')),
+      h('div',{class:'panel'},h('h3',null,st.day?'On '+fmtDate(st.day):'Add planned spending'),
+        st.day&&dayItems.length?h('ul',{class:'list'},dayItems.map(x=>h('li',null,h('span',{class:'fund',style:`--fc:${FUND_COLOR[x.fund]}`},x.fund),h('div',{class:'grow'},h('b',null,x.title),h('div',{class:'small muted'},[x.amount?money(x.amount):'',x.req?'request · '+x.stage:'planned',x.note].filter(Boolean).join(' · '))),
+          x.req?null:confirmBtn('×',()=>vaultSave(v=>{ v.plan=(v.plan||[]).filter(p=>p.id!==x.id); })))) ):null,
+        h('div',{class:'fgrid',style:'margin-top:8px'},fld(st.f,'date','Date',{type:'date',id:'pld'}),fld(st.f,'title','What',{id:'plt',ph:'Dining Out deposit'}),fld(st.f,'fund','Fund',{type:'select',options:PLAN_FUNDS,id:'plf',onchange:()=>{}}),fld(st.f,'amount','Estimated cost ($)',{id:'pla',type:'number'}),fld(st.f,'note','Note',{id:'pln',wide:true})),
+        h('button',{class:'btn pri',style:'margin-top:8px',onclick:add},'Add to the calendar'),
+        future.length?h('div',{style:'margin-top:14px'},h('h4',null,'Coming up'),h('ul',{class:'list'},future.slice(0,12).map(x=>h('li',null,h('span',{class:'mono small',style:'width:70px;flex:none'},fmtShort(x.date)),h('span',{class:'fund',style:`--fc:${FUND_COLOR[x.fund]}`},x.fund),h('span',{class:'grow'},x.title),h('span',{class:'mono small'},x.amount?money(x.amount):''))))):null)));
 }
 </script>
 <script>
