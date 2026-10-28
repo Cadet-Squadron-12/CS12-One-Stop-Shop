@@ -468,7 +468,8 @@ function outlookBlock(){
   return [
     head(ed?'Edit the weekly outlook':o.title, ed?'Change any cell, then save. Everyone sees the update right away.':null,
       S.canEdit? (ed? h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{S.edit.outlook=false;render()}},'Cancel'),h('button',{class:'btn pri',onclick:async()=>{ await upd('config/site',{outlook:{title:draft.title,quote:draft.quote,days:draft.days,rows:draft.rows,updated:new Date().toISOString(),updatedBy:myName()||''}}); S.edit.outlook=false; toast('Outlook saved'); render(); }},'Save outlook'))
-        : h('button',{class:'btn',onclick:()=>{S.edit.outlook=true;S.edit.outlookDraft=JSON.parse(JSON.stringify(o));render()}},'Edit outlook')) : null),
+        : h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{S.edit.paste={text:'',res:null};render()}},'Paste from Excel'),h('button',{class:'btn',onclick:()=>{S.edit.outlook=true;S.edit.outlookDraft=JSON.parse(JSON.stringify(o));render()}},'Edit outlook'))) : null),
+    !ed&&S.canEdit&&S.edit.paste? pasteOutlookPanel(o):null,
     ed? h('div',{class:'fgrid'},h('label',{class:'f'},'Week title',h('input',{type:'text',id:'otitle',value:draft.title,oninput:e=>draft.title=e.target.value})),h('label',{class:'f wide'},'Quote of the week',h('input',{type:'text',id:'oquote',value:draft.quote,oninput:e=>draft.quote=e.target.value}))) :
       h('div',{class:'panel',style:'background:var(--sun-soft);border-color:transparent'},h('h4',null,'Quote of the week'),h('p',{class:'quote'},o.quote)),
     h('div',{class:'tw'},grid)
@@ -631,7 +632,7 @@ function sdoView(){
     h('div',{class:'panel'},
       h('div',{class:'row',style:'margin-bottom:10px'},h('button',{class:'btn sm',onclick:()=>shift(-1),'aria-label':'Previous month'},'‹'),h('h3',{style:'margin:0'},MONTHS[m-1]+' '+y),h('button',{class:'btn sm',onclick:()=>shift(1),'aria-label':'Next month'},'›'),h('span',{class:'spacer'}),S.canEdit?h('span',{class:'small muted'},'Click a day to change the SDO.'):null),
       h('div',{class:'cal'},['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>h('div',{class:'dn'},d)),cells),
-      !S.canEdit?h('p',{class:'small muted',style:'margin:10px 0 0'},'Phone numbers are visible to staff only.'):null),
+      S.canEdit?sdoPasteBox():h('p',{class:'small muted',style:'margin:10px 0 0'},'Phone numbers are visible to staff only.')),
     h('div',{class:'panel'},h('h3',null,'CSOD overview'),h('ul',{class:'small',style:'padding-left:18px;margin:0'},s.overview.map(l=>/^(FIRST|SECOND) SHIFT|^Overview/.test(l)?h('li',{style:'list-style:none;margin:8px 0 2px -18px;font-weight:700'},l):h('li',null,l))),
       S.canEdit&&notes&&notes.cwocDoorCode? h('div',{class:'banner warn',style:'margin:12px 0 0'},h('b',null,'CWOC door code: '),h('span',{class:'mono'},notes.cwocDoorCode),h('span',{class:'small muted'},' (staff only)')):null)
   );
@@ -2014,6 +2015,99 @@ function astaffEditor(){
     h('div',{class:'mwedit'},cols.map(i=>h('label',{class:'f'},h('span',null,WD[i]),
       h('textarea',{id:'ast'+i,rows:5,value:st.draft[i],oninput:e=>{ st.draft[i]=e.target.value; }},st.draft[i])))),
     h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn pri',onclick:save},'Save schedule'),h('button',{class:'btn',onclick:()=>{ st.draft=WD.map((_,i)=>(ASTAFF_DEFAULT[i]||[]).join('\n')); render(); }},'Reset to the standard pattern')));
+}
+</script>
+<script>
+/* ================= PASTE FROM EXCEL =================
+   Copying cells in Excel (or Google Sheets / Numbers) puts them on the clipboard as tab-separated text.
+   These tools read that text, show a preview, and save it: the weekly outlook on the Dozen Daily and the SDO schedule. */
+function parseTSV(text){
+  text=String(text||'').replace(/\r\n?/g,'\n'); const rows=[]; let row=[], cell='', q=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){ cell+='"'; i++; } else q=false; } else cell+=ch; continue; }
+    if(ch==='"'&&cell==='') { q=true; continue; }
+    if(ch==='\t'){ row.push(cell); cell=''; continue; }
+    if(ch==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; continue; }
+    cell+=ch; }
+  if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+  return rows.map(r=>r.map(c=>c.replace(/ /g,' ').trim()));
+}
+const DAYS_RE=/^(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/i;
+const ASTAFF_TAG=/^\((A1|A2|A3|A4\/A?6|Stan\/Eval|C&H)\)/i;
+// Turns a pasted block into the outlook: a header row with the weekday names, then rows. A label in the first
+// column starts a row (All, Step Brief, MISC, 2027...); rows with a blank label add lines to the row above.
+function outlookFromPaste(grid,cur){
+  const note=[]; grid=grid.filter(r=>r.some(c=>c));
+  if(!grid.length) return {err:'Nothing to read. Copy the cells in Excel, then paste here.'};
+  let hi=grid.findIndex(r=>r.filter(c=>DAYS_RE.test(c)).length>=3);
+  const days=(cur.days&&cur.days.length===7?cur.days:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']).slice();
+  let cols=null, title=null, quote=null;
+  if(hi>=0){
+    const hdr=grid[hi]; cols=Array(7).fill(-1);
+    hdr.forEach((c,ci)=>{ const m=DAYS_RE.exec(c); if(!m) return; const idx=['sun','mon','tue','wed','thu','fri','sat'].indexOf(m[1].toLowerCase()); if(idx>=0&&cols[idx]<0){ cols[idx]=ci; days[idx]=c; } });
+    grid.slice(0,hi).forEach(r=>{ const t=r.find(c=>/outlook|week/i.test(c)); if(t&&!title) title=t; });
+  } else { cols=[1,2,3,4,5,6,7]; note.push('No row of weekday names found, so the first column is read as labels and the next 7 as Sunday–Saturday.'); }
+  const firstDayCol=Math.min(...cols.filter(c=>c>=0));
+  let body=grid.slice(hi+1);
+  // calendar style: a row like "1 (M10)" under the weekday names adds the day code ("Tuesday: M10")
+  if(body.length&&cols.some(c=>c>=0&&/^\d{1,2}\s*\(([A-Z]\d+)\)\s*$/.test(body[0][c]||''))){
+    cols.forEach((c,i)=>{ const m=/^\d{1,2}\s*\(([A-Z]\d+)\)/.exec(body[0][c]||''); if(m) days[i]=days[i].replace(/:.*$/,'')+': '+m[1]; }); body=body.slice(1); }
+  const rows=[]; let skipped=0;
+  body.forEach(r=>{
+    const label=(firstDayCol>0?r.slice(0,firstDayCol).find(c=>c):'')||'';
+    if(/^quote/i.test(label)){ quote=cols.map(c=>c>=0?r[c]||'':'').filter(Boolean).join(' ')||r.slice(1).find(c=>c)||''; return; }
+    const cells=cols.map(c=>{ const v=c>=0?(r[c]||''):''; const ls=v.split('\n').filter(x=>{ if(ASTAFF_TAG.test(x.trim())){ skipped++; return false; } return true; }); return ls.join('\n').trim(); });
+    if(label||!rows.length) rows.push({label:label||'All',cells});
+    else { const last=rows[rows.length-1]; cells.forEach((v,i)=>{ if(v) last.cells[i]=last.cells[i]?last.cells[i]+'\n'+v:v; }); }
+  });
+  if(skipped) note.push(`${skipped} A-staff item${skipped===1?'':'s'} left out: those come from the A-staff preflight schedule.`);
+  if(!rows.length) return {err:'Found the weekday names but no rows under them.'};
+  return {days,rows:rows.filter(r=>r.cells.some(Boolean)||/^20\d\d$/.test(r.label)),title,quote,note};
+}
+function pasteOutlookPanel(o){
+  const st=S.edit.paste||(S.edit.paste={text:'',res:null});
+  const read=()=>{ st.res=outlookFromPaste(parseTSV(st.text),o); render(); };
+  const r=st.res;
+  return h('div',{class:'panel',style:'border:2px solid var(--sky)'},h('h3',null,'Paste the week from Excel'),
+    h('ol',{class:'small',style:'margin:0 0 8px;padding-left:18px'},
+      h('li',null,'In Excel, select the week: the row of weekday names and everything under it (include the labels column, like All / Step Brief / 2027).'),
+      h('li',null,'Copy (Ctrl+C), click in the box below and paste (Ctrl+V).'),
+      h('li',null,'Check the preview, then save. Everyone sees it right away, and My Squadron updates from it.')),
+    h('textarea',{id:'pastebox',rows:6,placeholder:'Paste here…',value:st.text,oninput:e=>{ st.text=e.target.value; },onpaste:()=>setTimeout(()=>{ st.text=$('#pastebox').value; read(); },0)},st.text),
+    h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'btn',onclick:read},'Preview'),h('button',{class:'btn',onclick:()=>{ S.edit.paste=null; render(); }},'Cancel')),
+    r&&r.err?h('div',{class:'banner bad small',style:'margin-top:8px'},r.err):null,
+    r&&!r.err?h('div',{class:'stack',style:'margin-top:10px'},
+      r.note.length?h('div',{class:'banner info small'},r.note.join(' ')):null,
+      h('div',{class:'fgrid'},h('label',{class:'f'},'Week title',h('input',{type:'text',id:'ptitle',value:st.title!=null?st.title:(r.title||o.title||''),oninput:e=>st.title=e.target.value})),h('label',{class:'f wide'},'Quote of the week',h('input',{type:'text',id:'pquote',value:st.quote!=null?st.quote:(r.quote||o.quote||''),oninput:e=>st.quote=e.target.value}))),
+      h('div',{class:'tw'},h('div',{class:'week'},h('div',{class:'dh'},''),r.days.map(d=>h('div',{class:'dh'},d)),r.rows.map(row=>[h('div',{class:'rl '+(/^20\d\d$/.test(row.label)?ycls(row.label):'')},row.label),row.cells.map(c=>h('div',{class:/^20\d\d$/.test(row.label)?'yc '+ycls(row.label):null},c))]))),
+      h('div',{class:'row'},h('button',{class:'btn pri',onclick:async()=>{
+        const title=(st.title!=null?st.title:(r.title||o.title||'')).slice(0,120), quote=(st.quote!=null?st.quote:(r.quote||o.quote||'')).slice(0,600);
+        const ok=await mutDoc('config/site',s=>{ s.outlook={title,quote,days:r.days.map(d=>d.slice(0,40)),rows:r.rows.slice(0,20).map(x=>({label:x.label.slice(0,40),cells:x.cells.map(c=>c.slice(0,1500))})),updated:new Date().toISOString(),updatedBy:myName()||''}; return s; });
+        if(ok){ S.edit.paste=null; toast('Week updated'); render(); } }},'Save this week'))):null);
+}
+
+/* ---------- SDO schedule: paste two columns, date and name ---------- */
+function parseDay(s){ s=String(s||'').trim(); if(!s) return null; let m;
+  if((m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  if((m=/^(\d{4})(\d{2})(\d{2})$/.exec(s))) return `${m[1]}-${m[2]}-${m[3]}`;
+  const yr=new Date().getFullYear();
+  if((m=/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s))){ const y=m[3]?(m[3].length===2?'20'+m[3]:m[3]):yr; return `${y}-${pad(+m[1])}-${pad(+m[2])}`; }
+  if((m=/^(?:[A-Za-z]+,?\s+)?(\d{1,2})[\s-]*([A-Za-z]{3,})\.?[\s-]*(\d{2,4})?$/.exec(s))&&MON_IDX[m[2].slice(0,3).toLowerCase()]!==undefined){ const y=m[3]?(m[3].length===2?'20'+m[3]:m[3]):yr; return `${y}-${pad(MON_IDX[m[2].slice(0,3).toLowerCase()]+1)}-${pad(+m[1])}`; }
+  if((m=/^(?:[A-Za-z]+,?\s+)?([A-Za-z]{3,})\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/.exec(s))&&MON_IDX[m[1].slice(0,3).toLowerCase()]!==undefined){ const y=m[3]||yr; return `${y}-${pad(MON_IDX[m[1].slice(0,3).toLowerCase()]+1)}-${pad(+m[2])}`; }
+  return null; }
+function sdoPasteBox(){
+  const st=S.edit.sdoPaste||(S.edit.sdoPaste={open:false,text:'',rows:null,bad:0});
+  if(!st.open) return h('button',{class:'btn sm',style:'margin-top:10px',onclick:()=>{ st.open=true; render(); }},'Paste SDOs from Excel');
+  const read=()=>{ const g=parseTSV(st.text).filter(r=>r.some(Boolean)); const rows=[]; let bad=0;
+    g.forEach((r,i)=>{ const d=parseDay(r[0]); const n=(r.slice(1).find(Boolean)||'').slice(0,60); if(d&&!isNaN(new Date(d+'T12:00'))) rows.push({d,n}); else if(r[0]&&!(i===0&&/^\s*(date|day)s?\s*$/i.test(r[0]))) bad++; });
+    st.rows=rows; st.bad=bad; render(); };
+  return h('div',{class:'box',style:'margin-top:10px'},h('b',null,'Paste SDOs from Excel'),
+    h('p',{class:'small muted',style:'margin:4px 0 6px'},'Copy two columns, date then name (any date style: 11/3, 3 Nov, 2026-11-03), and paste. A blank name clears that day.'),
+    h('textarea',{id:'sdopaste',rows:5,value:st.text,oninput:e=>st.text=e.target.value,onpaste:()=>setTimeout(()=>{ st.text=$('#sdopaste').value; read(); },0)},st.text),
+    st.rows?h('p',{class:'small',style:'margin:6px 0'},`${st.rows.length} day${st.rows.length===1?'':'s'} read`+(st.bad?` · ${st.bad} line${st.bad===1?'':'s'} skipped (date not recognized)`:'')+(st.rows.length?`: ${fmtShort(st.rows[0].d)} to ${fmtShort(st.rows[st.rows.length-1].d)}`:'')):null,
+    h('div',{class:'row'},h('button',{class:'btn',onclick:read},'Preview'),
+      st.rows&&st.rows.length?h('button',{class:'btn pri',onclick:async()=>{ const ok=await mutDoc('sdo/schedule',s=>{ st.rows.forEach(({d,n})=>{ if(n) s.days[d]=n; else delete s.days[d]; }); return s; }); if(ok){ toast(`SDO schedule updated (${st.rows.length} days)`); S.edit.sdoPaste=null; render(); } }},'Save to SDO schedule'):null,
+      h('button',{class:'btn',onclick:()=>{ S.edit.sdoPaste=null; render(); }},'Cancel')));
 }
 </script>
 <script>
