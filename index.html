@@ -478,9 +478,10 @@ function nameDatalist(id){ const set=new Set(allPeople().map(p=>p.name)); const 
 </script>
 <script>
 /* ================= HOME ================= */
-function outlookBlock(){
+// The weekly outlook is shown on the Dozen Daily for everyone; it can only be changed from Sq Staff → Exec
+function outlookBlock(editable){
   const site=D('config/site'); if(!site) return [];
-  const o=site.outlook; const ed=S.edit.outlook;
+  const o=site.outlook; const ed=!!editable&&S.edit.outlook;
   const todayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   const draft=S.edit.outlookDraft;
   const grid=h('div',{class:'week'},
@@ -493,9 +494,9 @@ function outlookBlock(){
   );
   return [
     head(ed?'Edit the weekly outlook':o.title, ed?'Change any cell, then save. Everyone sees the update right away.':null,
-      S.canEdit? (ed? h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{S.edit.outlook=false;render()}},'Cancel'),h('button',{class:'btn pri',onclick:async()=>{ await upd('config/site',{outlook:{title:draft.title,quote:draft.quote,days:draft.days,rows:draft.rows,updated:new Date().toISOString(),updatedBy:myName()||''}}); S.edit.outlook=false; toast('Outlook saved'); render(); }},'Save outlook'))
+      editable&&S.canEdit? (ed? h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{S.edit.outlook=false;render()}},'Cancel'),h('button',{class:'btn pri',onclick:async()=>{ await upd('config/site',{outlook:{title:draft.title,quote:draft.quote,days:draft.days,rows:draft.rows,updated:new Date().toISOString(),updatedBy:myName()||''}}); S.edit.outlook=false; toast('Outlook saved'); render(); }},'Save outlook'))
         : h('div',{class:'row'},h('button',{class:'btn',onclick:()=>{S.edit.paste={text:'',res:null};render()}},'Paste from Excel'),h('button',{class:'btn',onclick:()=>{S.edit.outlook=true;S.edit.outlookDraft=JSON.parse(JSON.stringify(o));render()}},'Edit outlook'))) : null),
-    !ed&&S.canEdit&&S.edit.paste? pasteOutlookPanel(o):null,
+    editable&&!ed&&S.canEdit&&S.edit.paste? pasteOutlookPanel(o):null,
     ed? h('div',{class:'fgrid'},h('label',{class:'f'},'Week title',h('input',{type:'text',id:'otitle',value:draft.title,oninput:e=>draft.title=e.target.value})),h('label',{class:'f wide'},'Quote of the week',h('input',{type:'text',id:'oquote',value:draft.quote,oninput:e=>draft.quote=e.target.value}))) :
       h('div',{class:'panel',style:'background:var(--sun-soft);border-color:transparent'},h('h4',null,'Quote of the week'),h('p',{class:'quote'},o.quote)),
     h('div',{class:'tw'},grid)
@@ -740,9 +741,9 @@ function umdView(){
     ppl.forEach(({p,pi})=>{
       const c=staff?contactFor(p.name):null; const key=si+':'+pi;
       if(ed&&ed.key===key){ const f=ed.f; const inp=(k,w)=>h('input',{type:'text',id:'umd'+k,value:f[k]||'',style:`min-width:${w||80}px;padding:3px 5px`,oninput:e=>f[k]=e.target.value});
-        rows.push(h('tr',null,h('td',null,inp('pos',180)),h('td',null,inp('cls',50)),h('td',null,inp('rank',70)),h('td',null,inp('name',150)),h('td',null,inp('flight',100)),h('td',null,inp('phone',110)),h('td',null,inp('email',200)),h('td',null,h('div',{class:'row'},h('button',{class:'btn sm pri',onclick:()=>saveUmd(si,pi,f)},'Save'),h('button',{class:'btn sm',onclick:()=>{S.edit.umd=null;render()}},'Cancel')))));
+        rows.push(h('tr',null,h('td',null,inp('pos',180)),h('td',null,inp('cls',50)),h('td',null,inp('rank',70)),h('td',null,inp('name',150)),h('td',null,h('input',{type:'text',id:'umdflight',value:f.flight||'',title:'Home flight from the spreadsheet. Chain of command comes from the roster section.',placeholder:'Home flight',style:'min-width:100px;padding:3px 5px',oninput:e=>f.flight=e.target.value})),h('td',null,inp('phone',110)),h('td',null,inp('email',200)),h('td',null,h('div',{class:'row'},h('button',{class:'btn sm pri',onclick:()=>saveUmd(si,pi,f)},'Save'),h('button',{class:'btn sm',onclick:()=>{S.edit.umd=null;render()}},'Cancel')))));
         return; }
-      rows.push(h('tr',{class:ycls(yearOf(p.cls))||null},h('td',null,p.pos),h('td',null,clsTag(p.cls)),h('td',{style:'white-space:nowrap'},p.rank),h('td',{style:'font-weight:600;white-space:nowrap'},p.name),h('td',{class:'small'},p.flight),
+      rows.push(h('tr',{class:ycls(yearOf(p.cls))||null},h('td',null,p.pos),h('td',null,clsTag(p.cls)),h('td',{style:'white-space:nowrap'},p.rank),h('td',{style:'font-weight:600;white-space:nowrap'},p.name),h('td',{class:'small'},chainLabel(p.name)),
         staff?h('td',{class:'mono small',style:'white-space:nowrap'},c?c.phone:''):null, staff?h('td',{class:'small',style:'overflow-wrap:anywhere'},c?c.email:''):null,
         staff?h('td',null,h('button',{class:'btn sm',onclick:()=>{S.edit.umd={key,f:{...p,phone:c?c.phone:'',email:c?c.email:''}};render()}},'Edit')):null));
     });
@@ -750,7 +751,7 @@ function umdView(){
   return h('div',{class:'stack'},
     h('div',{class:'row'},h('div',{class:'small muted'},'Unit Commander: ',h('b',null,r.unitCC)),h('span',{class:'spacer'}),h('input',{type:'text',id:'umdq',placeholder:'Search name, position, flight…',style:'max-width:280px',value:S.sub.umdq||'',onchange:e=>{S.sub.umdq=e.target.value;render()}})),
     !staff?h('div',{class:'banner info small'},'Phone numbers and emails are visible to staff only.'):null,
-    h('div',{class:'tw',style:'max-height:72vh'},h('table',{class:'t umd'},h('thead',null,h('tr',null,['Position','Class','Rank','Name','Flight'].map(x=>h('th',null,x)),staff?[h('th',null,'Phone'),h('th',null,'Email'),h('th',null,'')]:null)),h('tbody',null,rows))));
+    h('div',{class:'tw',style:'max-height:72vh'},h('table',{class:'t umd'},h('thead',null,h('tr',null,['Position','Class','Rank','Name','Chain of command'].map(x=>h('th',null,x)),staff?[h('th',null,'Phone'),h('th',null,'Email'),h('th',null,'')]:null)),h('tbody',null,rows))));
 }
 async function saveUmd(si,pi,f){
   const cur=D('roster/main'); const old=((cur.sections[si]||{}).people||[])[pi]; if(!old){ S.edit.umd=null; render(); return toast('That row moved. Try again.'); }
@@ -1860,7 +1861,7 @@ function sqExec(){
       row:x=>[x.name,x.unit||unitOf(x.name).label,x.kind,x.depart,x.departTime||'',x.ret,x.retTime||'',x.where||'',(x.created||'').slice(0,10)]}),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Weekly schedule for the Dozen Daily'),h('span',{class:'spacer'}),h('span',{class:'chip '+(age==null||age>6?'Returned':'Approved')},age==null?'Not updated on the site yet':age===0?'Updated today':`Updated ${age}d ago`)),
       h('p',{class:'small muted'},'Update this every week. It’s the schedule everyone sees on the Dozen Daily.'),
-      h('div',{class:'stack'},outlookBlock()))
+      h('div',{class:'stack'},outlookBlock(true)))
   );
 }
 
@@ -2201,6 +2202,11 @@ function unitOf(name){
   const f=((ents[0].flight||'')+' ').match(/Alpha|Bravo|Charlie|Delta/); if(f) return {kind:'flight',key:f[0],label:f[0]+' Flight'};
   return {kind:'',key:'',label:''};
 }
+// what the roster shows: the person's chain, plus their staff job when they also hold a flight job
+function chainLabel(name){ const u=unitOf(name); if(!u.kind) return '—';
+  if(u.kind!=='flight') return u.label;
+  const staff=allPeople().filter(p=>sameName(p.name,name)).map(p=>{ const m=(p.pos||'').match(/^Squadron (A1|A2|A3|A4\/A6)\b/); return m?m[1].replace('A4/A6','A4/6'):/Standardization/.test(p.pos||'')?'Stan/Eval':''; }).filter(Boolean);
+  return staff.length?`${u.label} (also ${[...new Set(staff)].join(', ')})`:u.label; }
 // eSSS / OCONUS routing option for that chain
 function routeCodeOf(name){ const u=unitOf(name); return u.kind==='flight'?u.key[0]:u.kind==='div'?({'A4/6':'A46','Stan/Eval':'SE','A-Staff':'A3'}[u.key]||u.key):u.kind==='gw'?'GW':u.kind?'SQ':''; }
 
