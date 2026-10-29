@@ -341,7 +341,7 @@ const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 
 /* ---------- app state ---------- */
 const S={docs:{}, photos:[], dirt:[], actions:[], ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
-const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','week/astaff','a46/vault','staff/a46import'];
+const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','week/astaff','staff/exports','a46/vault','staff/a46import'];
 const D=p=>{ const v=S.docs[p]; const o=S.overlay&&S.overlay[p]; return (v&&o)?o(v):v; };
 /* ---------- data shape guard ----------
    Every record is repaired to the shape the tabs expect as it loads, so a half-saved record,
@@ -366,6 +366,7 @@ const SHAPES={
   'grids/rooming':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'grids/coc':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'week/astaff':{weekly:{__map__:['']}},
+  'staff/exports':{exec:{__map__:null},shirt:{__map__:null}},
   'a46/vault':null,'staff/a46import':null
 };
 const COL_SHAPES={
@@ -875,7 +876,7 @@ VIEWS._links=function(compact){
       h('button',{class:'btn pri',onclick:()=>{ if(!/^https:\/\//.test(nl.url)) return toast('Links need to start with https://'); upd('config/site',{links:[...links,{label:nl.label||nl.url,url:nl.url}]}); S.edit.newLink=null; }},'Add link')):null);
 };
 /* AOC / AMT contacts: visible to every signed-in member, editable by staff */
-const LEADERS_DEFAULT=[{name:'Maj Roz Chromy',role:'Air Officer Commanding (AOC)',phone:'719-373-5428',email:''},{name:'MSgt Clapp',role:'Academy Military Trainer (AMT)',phone:'848-464-7424',email:''}];
+const LEADERS_DEFAULT=[{name:'Maj Roz Chromy',role:'Commander',phone:'719-373-5428',email:''},{name:'MSgt Clapp',role:'Academy Military Trainer (AMT)',phone:'848-464-7424',email:''}];
 function leadersPanel(){
   const site=D('config/site')||{}; const list=(site.leaders&&site.leaders.length)?site.leaders:LEADERS_DEFAULT;
   const ed=S.edit.leaders;
@@ -887,7 +888,7 @@ function leadersPanel(){
       h('button',{class:'btn',onclick:()=>{ S.edit.leaders=null; render(); }},'Cancel')));
   const tel=n=>'tel:'+String(n).replace(/[^\d+]/g,'');
   return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Squadron leadership'),h('span',{class:'spacer'}),S.canEdit?h('button',{class:'btn sm',onclick:()=>{ S.edit.leaders=JSON.parse(JSON.stringify(list)); render(); }},'Edit'):null),
-    h('ul',{class:'list',style:'margin-top:8px'},list.map(p=>h('li',null,h('div',{class:'grow'},h('b',null,p.name),h('div',{class:'small muted'},p.role)),
+    h('ul',{class:'list',style:'margin-top:8px'},list.map(p=>h('li',null,h('div',{class:'grow'},h('b',null,p.name),h('div',{class:'small muted'},/chromy/i.test(p.name||'')&&/AOC|Air Officer/i.test(p.role||'')?'Commander':p.role)),
       h('div',{class:'small mono',style:'text-align:right;overflow-wrap:anywhere'},p.phone?h('a',{href:tel(p.phone)},p.phone):null,p.phone?h('br'):null,
         p.email?h('a',{href:'mailto:'+p.email},p.email):(S.canEdit?h('span',{class:'muted'},'add email: Edit'):null))))));
 }
@@ -1156,6 +1157,12 @@ function nameParts(n){ n=String(n||'').trim().replace(/\s+/g,' '); if(!n) return
 function firstLast(n){ const p=nameParts(n); return {first:p.first,last:p.last}; }
 const flOf=n=>{ const p=nameParts(n); return [p.first,p.last].filter(Boolean).join(' '); };
 function lastFirst(n){ const p=nameParts(n); if(!p.last) return p.first; return `${p.last}, ${p.first}${p.mi?' '+p.mi+'.':''}`; }
+// Form 10 / AF 174: only a real document headed up the chain goes to the First Sergeant's log
+function shirtToggle(f){ if(window.PUBLIC) return null; const on=f.submit===true; const set=v=>{ f.submit=v; bsave(); render(); };
+  return h('div',{class:'stack',style:'gap:6px'},h('div',{class:'seg',role:'group','aria-label':'Is this a real document?'},
+      h('button',{type:'button','aria-pressed':String(!on),onclick:()=>set(false)},'Testing the paperwork'),
+      h('button',{type:'button','aria-pressed':String(on),onclick:()=>set(true)},'Submitting it up the chain')),
+    h('div',{class:'small '+(on?'':'muted')},on?'This is a real document: downloading it sends it to the First Sergeant’s log.':'Practice run: nothing is sent to the First Sergeant. Switch to “Submitting it up the chain” for a real one.')); }
 const NAME_HINT='Pick from the list, then add the middle initial at the end (Kent, Sophie M.).';
 function lfDatalist(id){ const set=new Set(allPeople().map(p=>p.name)); return h('datalist',{id},[...set].map(n=>lastFirst(n)).sort().map(n=>h('option',{value:n}))); }
 function findPos(re,flight){ return allPeople().find(p=>re.test(p.pos)&&(!flight||(p.section||'').startsWith(flight))); }
@@ -1353,8 +1360,8 @@ function builderF10(){
       fld(f,'narrative','Narrative',{type:'textarea',rows:10,wide:true})),
     h('details',{class:'box'},h('summary',null,'Section VI · Final processing (awarding official only)'),h('div',{class:'fgrid',style:'margin-top:10px'},
       fld(f,'demerits','1. Demerit(s)'),fld(f,'confinements','2. Confinement(s)'),fld(f,'lossPass','3. Loss of pass priv'),fld(f,'tours','4. Tours'),fld(f,'pov','5. Revoke POV priv'))),
-    h('div',{class:'row'},h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildForm10(f); if(await savePdf(await d.save(),`Form 10 - ${f.cadet||'Report of Conduct'}.pdf`)){ await saveMyDraft('f10','Form 10'+(f.cadet?' - '+f.cadet:''),f); if(f.notify!==false) await sendDiscipline('Form 10',{cadet:f.cadet,classYear:f.classYear,date:f.date,ro:f.ro,summary:(f.narrative||'').slice(0,240),mfr:f.mfr}); }}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download Form 10'),
-      window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:f.notify!==false,onchange:ev=>{f.notify=ev.target.checked;bsave()}}),'Notify the First Sergeant (staff only)'),
+    h('div',{class:'row'},h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildForm10(f); if(await savePdf(await d.save(),`Form 10 - ${f.cadet||'Report of Conduct'}.pdf`)){ await saveMyDraft('f10','Form 10'+(f.cadet?' - '+f.cadet:''),f); if(f.submit===true) await sendDiscipline('Form 10',{cadet:f.cadet,classYear:f.classYear,date:f.date,ro:f.ro,summary:(f.narrative||'').slice(0,240),mfr:f.mfr}); }}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download Form 10'),
+      shirtToggle(f),
       h('button',{class:'btn',onclick:()=>{ const m=B.memo=memoDefaults(); m.kind='memo'; m.to='[AWARDING OFFICIAL OFFICE SYMBOL]'; m.subject='Response to Form 10'; m.paras=[{text:`I have reviewed the Form 10 dated ${fmtDate(f.date)} and respectfully request you consider the following information.`,subs:[]},{text:'[State the facts as you understand them, in order.]',subs:[]},{text:'[Address the alleged conduct and any corrective action you have already taken.]',subs:[]},{text:'[State your request.]',subs:[]}]; bsave(); S.sub.doc='memo'; ls('sub',S.sub); render(); }},'Write a response memo instead'))
   );
 }
@@ -1375,7 +1382,7 @@ function builderF174(){
     h('details',{class:'box'},h('summary',null,'IV–VI · Counselee comments, referral and commander (optional)'),h('div',{class:'fgrid',style:'margin-top:10px'},
       fld(f,'SummaryCounselee','13. Summary of counselee’s comments',{type:'textarea',rows:4,wide:true}),fld(f,'NameCounselee','14. Name and rank of counselee'),fld(f,'DateCounselee','16. Date',{type:'date'}),
       fld(f,'AgenciesRecommended','17. Referral agencies recommended',{wide:true}),fld(f,'CmdrComments','Commander’s comments',{type:'textarea',rows:3,wide:true}),fld(f,'NameCmdr','18. Name and rank of commander'),fld(f,'DateCmdr','20. Date',{type:'date'}))),
-    h('div',{class:'row'},window.PUBLIC?null:h('label',{class:'ck'},h('input',{type:'checkbox',checked:f.notify!==false,onchange:ev=>{f.notify=ev.target.checked;bsave()}}),'Notify the First Sergeant (staff only)'),h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildForm174(f); if(await savePdf(await d.save(),`AF 174 - ${f.Name||'Counseling'}.pdf`)){ await saveMyDraft('f174','AF 174'+(f.Name?' - '+f.Name:''),f); if(f.notify!==false) await sendDiscipline('AF 174',{cadet:f.Name,date:f.DateCounselor,ro:f.NameCounselor,summary:[f.Reason,(f.Summary||'').slice(0,200)].filter(Boolean).join(' - ')}); }}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download AF 174'))
+    shirtToggle(f),h('div',{class:'row'},h('button',{class:'btn pri',onclick:async ev=>{ const b=ev.currentTarget;b.disabled=true; try{ const d=await buildForm174(f); if(await savePdf(await d.save(),`AF 174 - ${f.Name||'Counseling'}.pdf`)){ await saveMyDraft('f174','AF 174'+(f.Name?' - '+f.Name:''),f); if(f.submit===true) await sendDiscipline('AF 174',{cadet:f.Name,date:f.DateCounselor,ro:f.NameCounselor,summary:[f.Reason,(f.Summary||'').slice(0,200)].filter(Boolean).join(' - ')}); }}catch(e){console.error(e);toast('Couldn’t build the PDF: '+e.message)} b.disabled=false; }},'Download AF 174'))
   );
 }
 
@@ -1771,7 +1778,7 @@ VIEWS.me=function(){
 </script>
 <script>
 /* ================= SQUADRON STAFF (locked) ================= */
-const SQ_ROLES=[['taskers','Taskers','—'],['exec','Exec','Squadron Executive'],['shirt','First Sergeant','Squadron First Sergeant'],['cc','Squadron Commander','Squadron Commander'],['cos','Chief of Staff','Squadron Chief of Staff'],['supt','Staff Supt','Squadron Staff Superintendent'],['sel','SEL','Squadron Senior Enlisted Leader']];
+const SQ_ROLES=[['taskers','Taskers','—'],['cc','Squadron Commander','Squadron Commander'],['cos','Chief of Staff','Squadron Chief of Staff'],['sel','SEL','Squadron Senior Enlisted Leader'],['exec','Exec','Squadron Executive'],['supt','Staff Supt','Squadron Staff Superintendent'],['shirt','First Sergeant','Squadron First Sergeant']];
 function cmdStaffPerson(name){ if(!name) return null; const r=D('roster/main'); if(!r) return null; const sec=r.sections.find(s=>/Command Staff/.test(s.name)); return sec?sec.people.find(p=>sameName(p.name,name)):null; }
 const daysTo=d=>d?Math.round((new Date(d+'T12:00')-new Date(today()+'T12:00'))/864e5):null;
 const ageDays=iso=>iso?Math.max(0,Math.floor((Date.now()-new Date(iso).getTime())/864e5)):0;
@@ -1848,6 +1855,9 @@ function sqExec(){
   const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
   return h('div',{class:'stack'},
     signoutCalendar(),
+    monthlyLogPanel({kind:'exec',title:'eSSS tracker',items:signouts(),monthOf:x=>(x.depart||'').slice(0,7),
+      header:['Name','Chain','Type','Leaving','Time','Back','Time','Where','Logged'],
+      row:x=>[x.name,x.unit||unitOf(x.name).label,x.kind,x.depart,x.departTime||'',x.ret,x.retTime||'',x.where||'',(x.created||'').slice(0,10)]}),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Weekly schedule for the Dozen Daily'),h('span',{class:'spacer'}),h('span',{class:'chip '+(age==null||age>6?'Returned':'Approved')},age==null?'Not updated on the site yet':age===0?'Updated today':`Updated ${age}d ago`)),
       h('p',{class:'small muted'},'Update this every week. It’s the schedule everyone sees on the Dozen Daily.'),
       h('div',{class:'stack'},outlookBlock()))
@@ -1855,27 +1865,34 @@ function sqExec(){
 }
 
 /* ---- First Sergeant ---- */
-const DISC_STATUS={'Form 10':['Submitted','Logged','With supervisor','Delivered to cadet','Cadet MFR received','Awarded','Closed'],'AF 174':['Submitted','Reviewed','Closed']};
-function disciplineItems(){ const out=[]; (S.discipline||[]).forEach(d=>Object.entries(d.items||{}).forEach(([id,x])=>out.push({...x,id,owner:d.id}))); return out.sort((a,b)=>(b.created||'').localeCompare(a.created||'')); }
+const DISC_STEPS=['Submitted','In progress','Filed'];
+const DISC_STATUS={'Form 10':DISC_STEPS,'AF 174':DISC_STEPS};
+// older records used longer status lists; fold them into the three steps
+const discStage=st=>DISC_STEPS.includes(st)?st:/closed|filed/i.test(st||'')?'Filed':st&&st!=='Submitted'?'In progress':'Submitted';
+function disciplineItems(){ const out=[]; (S.discipline||[]).forEach(d=>Object.entries(d.items||{}).forEach(([id,x])=>{ if(x&&typeof x==='object') out.push({...x,id,owner:d.id,status:discStage(x.status)}); })); return out.sort((a,b)=>(b.created||'').localeCompare(a.created||'')); }
 function sqShirt(){
-  const show=S.sub.shirtShow||'open'; const all=disciplineItems(); const list=all.filter(x=>show==='all'||x.status!=='Closed');
+  const show=S.sub.shirtShow||'open'; const all=disciplineItems(); const list=all.filter(x=>show==='all'||x.status!=='Filed');
   const wk=weekStart(today()); const dirt=(S.dirt||[]).filter(x=>(x.date||x.created||'').slice(0,10)>=wk).sort((a,b)=>(b.created||'').localeCompare(a.created||''));
-  const setStatus=(x,v)=>S.db.doc('discipline/'+x.owner).update({items:{[x.id]:{status:v,updated:new Date().toISOString()}}}).catch(dbErr);
+  const setStatus=(x,v)=>S.db.doc('discipline/'+x.owner).update({items:{[x.id]:{status:v,updated:new Date().toISOString(),updatedBy:whoAmI()}}}).catch(dbErr);
+  const remove=x=>S.db.doc('discipline/'+x.owner).update({items:{[x.id]:null}}).then(()=>toast('Removed from the log')).catch(dbErr);
+  const mon=t=>(t||'').slice(0,7);
   return h('div',{class:'stack'},
-    h('div',{class:'kpis'},kpi('Open Form 10s',String(all.filter(x=>x.kind==='Form 10'&&x.status!=='Closed').length)),kpi('Open 174s',String(all.filter(x=>x.kind==='AF 174'&&x.status!=='Closed').length)),kpi('DIRT this week',String(dirt.length))),
-    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Form 10 and AF 174 timeline'),h('span',{class:'spacer'}),h('div',{class:'seg'},[['open','Open'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(show===k),onclick:()=>{S.sub.shirtShow=k;render()}},l)))),
-      h('p',{class:'small muted'},'Sent from the Paperwork Builder with “Notify the First Sergeant” checked. Only staff with Editor access can see these. For Form 10s, the cadet’s MFR is due within 3 duty days of receiving it.'),
-      list.length?h('div',{class:'stack',style:'gap:10px'},list.map(x=>{ const steps=DISC_STATUS[x.kind]||DISC_STATUS['AF 174']; const si=steps.indexOf(x.status);
+    h('div',{class:'kpis'},kpi('Submitted',String(all.filter(x=>x.status==='Submitted').length),null,all.some(x=>x.status==='Submitted')),kpi('In progress',String(all.filter(x=>x.status==='In progress').length)),kpi('Filed this month',String(all.filter(x=>x.status==='Filed'&&mon(x.updated||x.created)===today().slice(0,7)).length)),kpi('DIRT this week',String(dirt.length))),
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Form 10 and AF 174 log'),h('span',{class:'spacer'}),h('div',{class:'seg'},[['open','Open'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(show===k),onclick:()=>{S.sub.shirtShow=k;render()}},l)))),
+      h('p',{class:'small muted'},'Only paperwork someone marked “Submitting it up the chain” in the Paperwork Builder lands here; practice runs never do. Click a step to move it along: Submitted → In progress → Filed. Only staff can see this log.'),
+      list.length?h('div',{class:'stack',style:'gap:10px'},list.map(x=>{ const si=DISC_STEPS.indexOf(x.status);
         return h('div',{class:'tl'},
-          h('div',{class:'row'},h('span',{class:'chip '+(x.kind==='Form 10'?'Returned':'Sent')},x.kind),h('b',null,x.cadet||'(no name)'),x.classYear?h('span',{class:'small muted'},x.classYear):null,h('span',{class:'small muted'},`${x.date?fmtShort(x.date)+' · ':''}from ${x.ro||x.from||'unknown'} · ${ageDays(x.created)}d ago`)),
+          h('div',{class:'row'},h('span',{class:'chip '+(x.kind==='Form 10'?'Returned':'Sent')},x.kind),h('b',null,x.cadet||'(no name)'),x.classYear?clsTag(x.classYear):null,h('span',{class:'small muted'},`${x.date?fmtShort(x.date)+' · ':''}from ${x.ro||x.from||'unknown'} · ${ageDays(x.created)}d ago`),h('span',{class:'spacer'}),
+            confirmBtn('Delete',()=>remove(x))),
           x.summary?h('div',{class:'small',style:'margin:4px 0 6px;overflow-wrap:anywhere'},x.summary):null,
-          h('div',{class:'track'},steps.map((st,i)=>h('button',{type:'button',class:'step'+(i<si?' done':i===si?' now':''),onclick:()=>setStatus(x,st)},h('i',null,i<si?'✓':String(i+1)),st)))); })):h('p',{class:'muted'},'Nothing open.')),
+          h('div',{class:'track'},DISC_STEPS.map((st,i)=>h('button',{type:'button',class:'step'+(i<si?' done':i===si?' now':''),onclick:()=>setStatus(x,st)},h('i',null,i<si?'✓':String(i+1)),st)))); })):h('p',{class:'muted'},show==='open'?'Nothing open.':'Nothing logged yet.')),
+    monthlyLogPanel({kind:'shirt',title:'Form 10 and AF 174 log',items:all,monthOf:x=>mon(x.created),
+      header:['Type','Cadet','Class','Date of incident','From / reporting official','Status','Submitted','Last update','Updated by','Summary'],
+      row:x=>[x.kind,x.cadet,x.classYear,x.date,x.ro||x.from,x.status,(x.created||'').slice(0,10),(x.updated||'').slice(0,10),x.updatedBy||'',x.summary]}),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'DIRT this week'),h('span',{class:'spacer'}),dirt.length?h('button',{class:'btn sm',onclick:()=>copy(dirt.map(x=>`• ${x.who?x.who+': ':''}${x.text}`).join('\n'))},'Copy list'):null),
       dirt.length?h('ul',{class:'list'},dirt.map(x=>h('li',null,h('span',{class:'chip Sent',style:'flex:none'},x.cat||'Shout-out'),h('div',{class:'grow'},x.who?h('b',null,x.who+': '):null,x.text)))):h('p',{class:'muted'},'No DIRT posted this week yet.'))
   );
 }
-
-/* ---- coverage gaps (shared by Supt / CC / CoS) ---- */
 function coverageGaps(days=7){
   const out={sdo:[],cq:[]}; const t=today(); const end=iso(new Date(new Date(t+'T12:00').getTime()+days*864e5));
   const s=D('sdo/schedule'); if(s){ for(let i=0;i<days;i++){ const d=iso(new Date(new Date(t+'T12:00').getTime()+i*864e5)); if(!s.days[d]&&!(s.notes&&s.notes[d])) out.sdo.push(d); } }
@@ -1885,6 +1902,7 @@ function coverageGaps(days=7){
 function sqSupt(){
   const g=coverageGaps(7); const [view,vseg]=seg('suptview',[['sdo','SDO schedule'],['cq','CQ schedule']],'sdo');
   return h('div',{class:'stack'},
+    suptPastePanel(),
     h('div',{class:'grid2',style:'align-items:start'},
       h('div',{class:'panel',style:g.sdo.length?'border:2px solid var(--coral)':''},h('h3',null,`Open SDO days · next 7 days (${g.sdo.length})`),
         g.sdo.length?h('ul',{class:'list'},g.sdo.map(d=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(d)),h('span',{class:'grow'},new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'long'})),h('span',{class:'chip Returned'},'No SDO')))):h('p',{style:'color:var(--mint)'},'Every day this week has an SDO.')),
@@ -1923,7 +1941,7 @@ function sqSel(){
 /* ---- Squadron Commander ---- */
 function sqCC(){
   const r=D('roster/main'); const ccName=(allPeople().find(p=>/^Squadron Commander$/.test((p.pos||'').trim()))||{}).name||'';
-  const so=signouts(); const t0=today(); const outNow=so.filter(x=>outOn(x,t0)); const wkEnd=iso(new Date(Date.now()+7*864e5)); const leaving=so.filter(x=>x.depart>t0&&x.depart<=wkEnd); const g=coverageGaps(7); const ts=taskerStatus(); const disc=disciplineItems().filter(x=>x.status!=='Closed');
+  const so=signouts(); const t0=today(); const outNow=so.filter(x=>outOn(x,t0)); const wkEnd=iso(new Date(Date.now()+7*864e5)); const leaving=so.filter(x=>x.depart>t0&&x.depart<=wkEnd); const g=coverageGaps(7); const ts=taskerStatus(); const disc=disciplineItems().filter(x=>x.status!=='Filed');
   const wk=weekStart(today()); const dirt=(S.dirt||[]).filter(x=>(x.date||x.created||'').slice(0,10)>=wk);
   const tot=ts.reduce((a,x)=>a+x.total,0), done=ts.reduce((a,x)=>a+x.done,0);
   return h('div',{class:'stack'},
@@ -2130,6 +2148,36 @@ function sdoPasteBox(){
 }
 </script>
 <script>
+/* ---------- CQ schedule: paste date, shift time and name ---------- */
+const normTime=t=>String(t||'').toUpperCase().replace(/\s+/g,'').replace(/[–—]/g,'-');
+function cqSlotFor(d,time){ const q=D('cq/board'); if(!q) return null; const T=normTime(time);
+  for(const w of q.weeks){ for(let col=0;col<7;col++){ if(cqDateFor(w,col)!==d) continue;
+      for(const r of w.rows){ if(normTime(col<4?r.wd:r.we)===T){ const sl=r.slots[col]; if(sl) return sl; } } } }
+  return null; }
+function cqPasteBox(){
+  const st=S.edit.cqPaste||(S.edit.cqPaste={text:'',rows:null});
+  const read=()=>{ const g=parseTSV(st.text).filter(r=>r.some(Boolean)); const rows=[];
+    g.forEach((r,i)=>{ const ti=r.findIndex(c=>/^\d{3,4}\s*[-–]\s*(\d{3,4}|taps)$/i.test(c.trim())); const d=parseDay(r.find(c=>parseDay(c))||'');
+      if(!d||ti<0){ if(!(i===0&&/date|day/i.test(r.join(' ')))) rows.push({bad:true,raw:r.join(' | ')}); return; }
+      const name=(r.find((c,ci)=>ci!==ti&&c&&!parseDay(c))||'').slice(0,60); const sl=cqSlotFor(d,r[ti]);
+      rows.push(!sl?{d,time:r[ti],name,miss:'No matching shift on the CQ sheet'}:sl.k==='x'?{d,time:r[ti],name,miss:'That slot is marked “do not fill”'}:{d,time:r[ti],name,id:sl.id}); });
+    st.rows=rows; render(); };
+  const good=(st.rows||[]).filter(x=>x.id), skip=(st.rows||[]).filter(x=>!x.id);
+  return h('div',null,
+    h('p',{class:'small muted',style:'margin:0 0 6px'},'Copy three columns from Excel: date, shift time (like 1600-1800 or 2200-TAPS) and name. A blank name clears the shift.'),
+    h('textarea',{id:'cqpaste',rows:5,value:st.text,oninput:e=>st.text=e.target.value,onpaste:()=>setTimeout(()=>{ st.text=$('#cqpaste').value; read(); },0)},st.text),
+    st.rows?h('div',{class:'small',style:'margin:6px 0'},`${good.length} shift${good.length===1?'':'s'} matched`,skip.length?h('div',{class:'muted'},`${skip.length} skipped: `+skip.slice(0,4).map(x=>x.bad?`“${x.raw}” (couldn’t read the date or time)`:`${fmtShort(x.d)} ${x.time} (${x.miss})`).join('; ')+(skip.length>4?'…':'')):null):null,
+    h('div',{class:'row'},h('button',{class:'btn',onclick:read},'Preview'),
+      good.length?h('button',{class:'btn pri',onclick:async()=>{ for(const x of good){ if(typeof cqWrite==='function') await cqWrite(x.id,x.name); else await upd('cq/board',{fill:{[x.id]:x.name}}); } toast(`CQ schedule updated (${good.length} shifts)`); S.edit.cqPaste=null; render(); }},'Save to CQ schedule'):null));
+}
+function suptPastePanel(){
+  const [w,wseg]=seg('suptpaste',[['sdo','SDO days'],['cq','CQ shifts']],'sdo');
+  const sdo=S.edit.sdoPaste||(S.edit.sdoPaste={open:true,text:'',rows:null,bad:0}); sdo.open=true;
+  return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Update from Excel'),h('span',{class:'spacer'}),wseg),
+    h('div',{style:'margin-top:8px'},w==='sdo'?sdoPasteBox():cqPasteBox()));
+}
+</script>
+<script>
 /* ================= eSSS TRACKER =================
    Who is leaving on an eSSS (or OCONUS package) and when. Filled automatically when someone downloads one (unless they
    untick it or mark it a practice run); staff can add one done outside the site. The Exec sees a calendar;
@@ -2176,11 +2224,11 @@ async function logSignout(t){
 // replaces the old "heads-up to my chain": the builders now log the trip dates instead
 async function sendHeadsUp(){ }
 function soLine(x,opts={}){ const y=personYear(x.name); const t=today(); const now=outOn(x,t);
-  const can=!x.legacy&&(S.canEdit||(S.uid&&(x.by===S.uid||(x.id||'').startsWith('so_'+S.uid.slice(0,28)))));
+  const can=(x.legacy?S.canEdit:(S.canEdit||(S.uid&&(x.by===S.uid||(x.id||'').startsWith('so_'+S.uid.slice(0,28))))));
   return h('li',null,nameDot(x.name),h('div',{class:'grow'},h('b',null,x.name),opts.unit&&x.unit?h('span',{class:'small muted'},' · '+x.unit):null,
       h('div',{class:'small muted'},[`${fmtShort(x.depart)}${x.departTime?' '+x.departTime:''} → ${fmtShort(x.ret)}${x.retTime?' '+x.retTime:''}`,x.kind,x.where].filter(Boolean).join(' · '))),
     now?h('span',{class:'chip Returned'},'Out now'):x.depart>t?h('span',{class:'chip Sent'},`in ${daysTo(x.depart)}d`):null,
-    can&&opts.del!==false?confirmBtn('×',()=>delDoc('signout/'+x.id)):null); }
+    can&&opts.del!==false?confirmBtn('×',()=>x.legacy?delDoc('headsup/'+x.id.replace(/^hs_/,'')):delDoc('signout/'+x.id)):null); }
 function soForm(st,forOthers){
   const save=async()=>{ const name=forOthers?st.name:myName(); if(!flOf(name)) return toast('Pick a name.'); if(!st.depart) return toast('Add the departure date.'); if(st.ret&&st.ret<st.depart) return toast('Return can’t be before departure.');
     if(await logSignout({name,depart:st.depart,ret:st.ret,where:st.where,kind:st.kind,departTime:st.dt,retTime:st.rt,mine:!forOthers})){ toast('Added to the eSSS tracker'); Object.assign(st,{name:'',depart:'',ret:'',where:'',dt:'',rt:''}); render(); } };
@@ -2220,7 +2268,11 @@ function signoutCalendar(){
 
 /* ---------- flight commanders / division chiefs ---------- */
 function leaderOutPanel(sc){
-  const t=today(); const inScope=n=>sc.names.some(m=>sameName(m,n)); const end=iso(new Date(Date.now()+14*864e5));
+  const t=today(); const end=iso(new Date(Date.now()+14*864e5));
+  // paperwork follows the chain: flight commanders get people whose chain is their flight (including A-staff who also hold a flight job);
+  // division chiefs get only people whose chain is their division
+  const fk=sc.kind==='flight'?(sc.group||sc.label).split(' ')[0]:'', dk=sc.kind==='div'?sc.label.replace(/ division$/,'').replace('A4/A6','A4/6'):'';
+  const inScope=n=>{ const u=unitOf(n); return sc.kind==='flight'?(u.kind==='flight'&&u.key===fk):(u.kind==='div'&&u.key===dk); };
   const mine=signouts().filter(x=>inScope(x.name)&&x.ret>=t&&x.depart<=end);
   const nowOut=mine.filter(x=>outOn(x,t)); const leaving=mine.filter(x=>x.depart>t);
   const names=l=>[...new Set(l.map(x=>x.name))];
@@ -2228,6 +2280,37 @@ function leaderOutPanel(sc){
     leaving.length?h('div',{class:'banner warn',style:'margin-bottom:8px'},h('b',null,`${names(leaving).length} from your ${sc.kind==='flight'?'flight':'division'}: `),names(leaving).join(', ')):h('p',{class:'muted',style:'margin:0 0 8px'},'Nobody from your '+(sc.kind==='flight'?'flight':'division')+' is leaving on an eSSS in the next 2 weeks.'),
     nowOut.length?h('div',{class:'small',style:'margin-bottom:6px'},h('b',null,'Out now: '),names(nowOut).join(', ')):null,
     mine.length?h('ul',{class:'list'},mine.map(x=>soLine(x,{del:false}))):null);
+}
+</script>
+<script>
+/* ================= MONTHLY PAPERWORK LOGS =================
+   At the end of each month the Exec (eSSS tracker) and First Sergeant (Form 10 / AF 174 log) download that month
+   as a spreadsheet file (.csv, opens in Excel) for documentation. The site remembers who saved each month, and
+   reminds them near month's end if it hasn't been saved yet. */
+const whoAmI=()=>myName()||(typeof FB!=='undefined'&&FB.user&&FB.user.email)||'staff';
+function csvCell(v){ v=v==null?'':String(v); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+async function csvDownload(filename,rows){ const text='﻿'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const dl=S.downloads||(typeof fbDownloads==='function'?fbDownloads():null); if(!dl) return toast('Downloads aren’t available here.');
+  await dl.save({filename,data:new Blob([text],{type:'text/csv;charset=utf-8'})}); return true; }
+const monthName=ym=>{ const [y,m]=ym.split('-').map(Number); return MONTHS[m-1]+' '+y; };
+function prevMonth(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-2,1); return d.getFullYear()+'-'+pad(d.getMonth()+1); }
+function monthlyLogPanel(o){ // o: {kind:'exec'|'shirt', title, items:[], monthOf:x=>'YYYY-MM', header:[], row:x=>[]}
+  const st=S.edit['log_'+o.kind]||(S.edit['log_'+o.kind]={});
+  const t=today(); const cur=t.slice(0,7); const prev=prevMonth(cur); const day=+t.slice(8);
+  const months=[...new Set([cur,prev,...o.items.map(o.monthOf).filter(m=>/^\d{4}-\d{2}$/.test(m))])].sort().reverse().slice(0,12);
+  const pick=st.m||(day<=7?prev:cur);
+  const rec=((D('staff/exports')||{})[o.kind]||{});
+  const lastDay=new Date(+cur.slice(0,4),+cur.slice(5,7),0).getDate();
+  const due=day<=7&&!rec[prev]?prev:day>=lastDay-2&&!rec[cur]?cur:null;
+  const list=o.items.filter(x=>o.monthOf(x)===pick);
+  const save=async()=>{ const ok=await csvDownload(`CS12 ${o.title} - ${monthName(pick)}.csv`,[o.header,...list.map(o.row)]);
+    if(ok) await mutDoc('staff/exports',d=>{ d[o.kind]=d[o.kind]||{}; d[o.kind][pick]={by:whoAmI(),at:new Date().toISOString(),count:list.length}; return d; }); };
+  return h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Monthly log'),h('span',{class:'spacer'}),
+      h('select',{'aria-label':'Month',onchange:e=>{ st.m=e.target.value; render(); }},months.map(m=>{ const op=h('option',{value:m},monthName(m)+(rec[m]?' ✓':'')); if(m===pick) op.selected=true; return op; }))),
+    due?h('div',{class:'banner warn small',style:'margin-top:8px'},h('b',null,`${monthName(due)} hasn’t been saved yet. `),'Download it for the squadron’s records.'):null,
+    h('p',{class:'small muted',style:'margin:6px 0 8px'},`Saves every ${o.title} entry from the month as a spreadsheet file for documentation. Keep it in the squadron’s Teams files.`),
+    h('div',{class:'row'},h('button',{class:'btn pri',onclick:save},`Download ${monthName(pick)} (${list.length})`),
+      rec[pick]?h('span',{class:'small muted'},`Saved by ${rec[pick].by||'staff'} on ${fmtShort((rec[pick].at||'').slice(0,10))}`):h('span',{class:'small muted'},'Not saved yet')));
 }
 </script>
 <script>
@@ -2919,7 +3002,7 @@ VIEWS.access=function(){
   if(!S.canEdit) return emptyState('Staff only.');
   const st=S.edit.acc||(S.edit.acc={email:'',role:'member',name:''});
   const reqs=FB.requests||[], mems=(FB.members||[]).slice().sort((a,b)=>(a.role===b.role?0:a.role==='staff'?-1:1)||a.id.localeCompare(b.id));
-  const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('Only staff can do that.'); } };
+  const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); if(!name) name=nameFromEmail(e); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('Only staff can do that.'); } };
   const remove=async e=>{ try{ await FB.fs.doc('members/'+e).delete(); toast('Removed'); }catch(x){ toast('Only staff can do that.'); } };
   return h('div',{class:'stack'},head('Access','Who can sign in to the squadron hub. Staff get edit rights and the locked tabs.'),
     h('div',{class:'banner info small'},'The site works out who someone is from their sign-in email (for example c27first.last@afacademy.af.edu → First Last on the roster). If it can’t tell, or they sign in with another email, type their roster name in the Name column.'),
@@ -2943,12 +3026,15 @@ VIEWS.access=function(){
     S.isOwner?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'One-time move from the Claude version. Pick the cs12-data-import.json file (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced.'),
       h('input',{type:'file',accept:'application/json,.json',onchange:async e=>{ const f=e.target.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); const n=await fbImport(data); toast(`Imported ${n} records`); }catch(x){ console.error(x); toast('Import failed: '+(x.message||x)); } }})):null);
 };
+// c27first.last@afacademy.af.edu -> the matching roster name ("First Last"), else the name spelled out from the email
+function nameFromEmail(em){ const guess=emailToName(em); if(!guess||!/^c\d{2}/i.test(String(em))) return ''; const p=allPeople().filter(x=>norm(x.name)===norm(guess)||sameName(x.name,guess));
+  if(new Set(p.map(x=>x.name)).size===1) return p[0].name; return guess.split(' ').map(w=>w.split('-').map(x=>x?x[0].toUpperCase()+x.slice(1):x).join('-')).join(' '); }
 async function fbBulkAdd(text,mems){
   const have=new Map((mems||[]).map(m=>[m.id,m])); const rows=[]; const bad=[];
   text.split(/\r?\n/).forEach(line=>{ if(!line.trim()) return; const m=line.match(/[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/); if(!m){ bad.push(line.trim()); return; }
     const email=m[0].toLowerCase(); const staff=/\bstaff\b/i.test(line.replace(m[0],''));
     const name=line.replace(m[0],'').replace(/\bstaff\b/ig,'').replace(/\bmember\b/ig,'').replace(/[<>,;"'\t]+/g,' ').replace(/\s+/g,' ').trim();
-    rows.push({email,staff,name}); });
+    rows.push({email,staff,name:name||nameFromEmail(email)}); });
   fbBulkAdd.skipped=bad.length;
   if(bad.length&&!rows.length) toast(`No emails found in ${bad.length} line${bad.length===1?'':'s'}.`);
   if(!rows.length){ if(!bad.length) toast('Paste at least one email.'); return 0; }
