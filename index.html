@@ -901,7 +901,8 @@ function selGrid(path){ const can=canEditSel();
 VIEWS.links=function(){
   const [cur,segEl]=seg('info',[['info','Contacts & links'],['mitch','Mitch’s seating'],['locker','Storage lockers'],['rooming','Rooming']],'info');
   if(cur!=='info') return h('div',{class:'stack'},head('Squadron Info','Contacts, links, seating, lockers and rooms.',segEl),
-    selGrid({mitch:'grids/mitches',locker:'grids/lockers',rooming:'grids/rooming'}[cur]));
+    cur==='mitch'?h('div',{class:'stack'},h('div',{class:'banner info small'},h('b',null,'Anyone in the squadron can update this. '),'Click Edit cells, then click a seat to change it.'),gridView('grids/mitches',!!S.db&&!S.nodb)):
+    selGrid({locker:'grids/lockers',rooming:'grids/rooming'}[cur]));
   return VIEWS._info(segEl);
 };
 VIEWS._info=function(segEl){
@@ -1705,8 +1706,17 @@ function myCq(name){ const q=D('cq/board'); if(!q) return []; const fill=q.fill|
   q.weeks.forEach(w=>w.rows.forEach(r=>r.slots.forEach((sl,col)=>{ const v=fill[sl.id]; if(!v) return; if(!(sameName(v,name)||(nick&&nick.nick&&norm(v)===norm(nick.nick)))) return; const d=cqDateFor(w,col); out.push({date:d,day:w.days[col],time:col<4?r.wd:r.we}); })));
   return out.filter(x=>x.date).sort((a,b)=>a.date.localeCompare(b.date)); }
 function mySdo(name){ const s=D('sdo/schedule'); if(!s) return []; return Object.entries(s.days).filter(([,n])=>sameName(n,name)).map(([d])=>d).sort(); }
-function myTaskers(name){ const tk=D('taskers/board'); if(!tk) return []; let p=null; tk.groups.forEach(g=>g.people.forEach(x=>{ if(!p&&sameName(x.name,name)) p=x; })); if(!p) return null;
-  return tk.columns.map(c=>({c,pid:p.id,v:(tk.status[p.id]||{})[c.id]||''})).filter(x=>x.v&&!/^yes/i.test(x.v)); }
+// find someone on the tasker board even when the spelling differs a little from the roster (Rodgers / Rogers)
+function editDist(a,b){ a=a||''; b=b||''; const m=a.length,n=b.length; if(Math.abs(m-n)>2) return 9; let prev=[...Array(n+1).keys()];
+  for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; } return prev[n]; }
+function tkPersonFor(name){ const tk=D('taskers/board'); if(!tk) return null; const all=[]; tk.groups.forEach(g=>g.people.forEach(x=>all.push(x)));
+  let p=all.find(x=>norm(x.name)===norm(name))||all.find(x=>sameName(x.name,name)); if(p) return p;
+  const me=nameParts(name); const close=all.filter(x=>{ const o=nameParts(x.name); return norm(o.first)===norm(me.first)&&editDist(norm(o.last),norm(me.last))<=2; });
+  return close.length===1?close[0]:null; }
+// every tasker assigned to this person, done or not (done = "Yes")
+function myTaskerList(name){ const tk=D('taskers/board'); const p=tkPersonFor(name); if(!tk||!p) return null;
+  return tk.columns.map(c=>({c,pid:p.id,v:(tk.status[p.id]||{})[c.id]||''})).filter(x=>x.v).map(x=>({...x,done:/^yes/i.test(x.v)})); }
+function myTaskers(name){ const l=myTaskerList(name); return l===null?null:l.filter(x=>!x.done); }
 // Flight commanders / flight chiefs and division chiefs see their people
 function leaderScope(name){
   const me=allPeople().filter(p=>sameName(p.name,name));
@@ -1750,7 +1760,7 @@ VIEWS.me=function(){
   const todos=(S.mine||[]).filter(d=>d.id.startsWith('todo_')).sort((a,b)=>(a.done-b.done)||(a.due||'9').localeCompare(b.due||'9'));
   const acts=(S.actions||[]).filter(a=>!a.done&&sameName(a.owner,name));
   const ldr=(S.ldr||[]).filter(x=>x.status!=='Done'&&sameName(x.assignee,name)).sort((a,b)=>(a.due||'9').localeCompare(b.due||'9'));
-  const tk=myTaskers(name); const cq=myCq(name).filter(x=>x.date>=t); const sdo=mySdo(name).filter(d=>d>=t);
+  const tkAll=(myTaskerList(name)||[]).sort((a,b)=>a.done-b.done||(tkDue(a.c)||'9').localeCompare(tkDue(b.c)||'9')); const tk=tkAll.filter(x=>!x.done); const cq=myCq(name).filter(x=>x.date>=t); const sdo=mySdo(name).filter(d=>d>=t);
   const meCol=`data/users/${S.uid}`;
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
@@ -1765,7 +1775,10 @@ VIEWS.me=function(){
         h('ul',{class:'list',style:'margin-top:8px'},
           ldr.map(x=>h('li',null,h('span',{class:'chip Returned'},{cos:'From CoS',sel:'From SEL',cc:'From Sq/CC'}[x.byRole]||'Staff'),h('div',{class:'grow'},x.title,h('div',{class:'small',style:`color:${x.due&&x.due<t?'var(--coral)':'var(--muted)'}`},[x.due?(x.due<t?'was due ':'due ')+fmtShort(x.due):'',x.notes].filter(Boolean).join(' · '))),h('button',{class:'btn sm',onclick:()=>upd('ldrtasks/'+x.id,{status:'Done',doneAt:new Date().toISOString()})},'Mark done'))),
           acts.map(a=>h('li',null,h('span',{class:'chip Sent'},a.staff),h('div',{class:'grow'},a.title,a.due?h('div',{class:'small muted'},'due '+fmtShort(a.due)):null))),
-          tk&&tk.length?tk.map(x=>h('li',null,h('span',{class:'chip Returned'},'Tasker'),h('div',{class:'grow'},x.c.label,tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):null),h('button',{class:'btn sm',onclick:()=>(typeof tkWrite==='function'?tkWrite(x.pid,x.c.id,'Yes'):upd('taskers/board',{status:{[x.pid]:{[x.c.id]:'Yes'}}}))},'Mark done'))):null,
+          tkAll&&tkAll.length?tkAll.map(x=>h('li',null,
+            h('input',{type:'checkbox',checked:x.done,'aria-label':'Done: '+x.c.label,onchange:e=>{ const v=e.target.checked?'Yes':'No'; if(typeof tkWrite==='function') tkWrite(x.pid,x.c.id,v); else upd('taskers/board',{status:{[x.pid]:{[x.c.id]:v}}}); }}),
+            h('span',{class:'chip '+(x.done?'Approved':'Returned')},'Tasker'),
+            h('div',{class:'grow',style:x.done?'text-decoration:line-through;color:var(--muted)':''},x.c.label,!x.done&&tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):null))):null,
           todos.map(d=>h('li',null,h('input',{type:'checkbox',checked:d.done,onchange:e=>S.db.doc(`${meCol}/${d.id}`).update({done:e.target.checked}).catch(dbErr)}),h('div',{class:'grow',style:d.done?'text-decoration:line-through;color:var(--muted)':''},d.text,d.due?h('div',{class:'small',style:`color:${!d.done&&d.due<t?'var(--coral)':'var(--muted)'}`},'due '+fmtShort(d.due)):null),confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))),
         !acts.length&&!ldr.length&&!(tk&&tk.length)&&!todos.length?h('p',{class:'muted'},'All clear. Staff action items and incomplete taskers with your name show up here too.'):null,
         h('p',{class:'small muted',style:'margin:8px 0 0'},'Your to-dos are private to you.'))),
@@ -2997,8 +3010,12 @@ function signInPanel(){
       h('p',{class:'small muted',style:'margin:12px 0 0'},'Only emails on the CS-12 access list can get in. Only ever sign in at ',h('b',null,OFFICIAL_HOST),'. Squadron staff will never ask for your password.'),
       h('button',{type:'button',class:'linkbtn small',style:'margin:10px auto 0;display:block',onclick:fbGoogle},'Site owner: sign in with Google'));
   }
+  if(FB.state==='checking') return h('div',{class:'panel lock'},logo,h('p',{class:'muted'},'Checking the access list…'));
+  if(FB.state==='checkfail') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Couldn’t check access'),
+    h('p',{class:'muted'},'The site couldn’t reach the access list just now (usually a weak connection). This doesn’t mean you’re not on it.'),
+    h('div',{class:'row',style:'justify-content:center'},h('button',{class:'btn pri',onclick:()=>location.reload()},'Try again'),h('button',{class:'btn',onclick:fbSignOut},'Sign out')));
   if(FB.state==='pending') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Not on the access list'),
-    h('p',{class:'muted'},'You’re signed in as ',h('b',null,FB.user.email),', but that email isn’t on the CS-12 access list. Sign out and use your squadron email, or ask the Chief of Staff to add you.'),
+    h('p',{class:'muted'},'You’re signed in as ',h('b',null,FB.user.email),', but that email isn’t on the CS-12 access list. Sign out and use your squadron email, or ask the Chief of Staff to add you. This page lets you in automatically as soon as you’re added.'),
     h('button',{class:'btn',style:'margin:8px auto 0',onclick:fbSignOut},'Sign out'));
   return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('p',{class:'muted'},'Checking your sign-in…'));
 }
@@ -3080,9 +3097,20 @@ boot=async function(){
     if(!u){ FB.state='out'; render(); return; }
     if(!u.emailVerified){ FB.state='verify'; S.tab='hub'; render(); return; }
     const em=(u.email||'').toLowerCase();
-    let m=null; try{ const s=await FB.fs.doc('members/'+em).get(); m=s.exists?s.data():null; }catch(e){}
+    // Check the access list. Right after signing in, Firestore can briefly refuse the read (the new sign-in hasn't
+    // reached it yet) or the network can blip: retry with a fresh sign-in token instead of calling that "not on the list".
+    FB.state='checking'; render();
+    let m=null, checkErr=null;
+    for(let i=0;i<6;i++){
+      try{ if(i>0){ try{ await u.getIdToken(true); }catch(e){} } const s=await FB.fs.doc('members/'+em).get({source:'server'}); m=s.exists?s.data():null; checkErr=null; break; }
+      catch(e){ checkErr=e; console.warn('access check',i,e&&e.code); await sleep(Math.min(4000,300*2**i)); }
+    }
+    if(checkErr&&!(OWNER&&em===OWNER)){ FB.state='checkfail'; FB.checkErr=checkErr; S.tab='hub'; render(); return; }
     if(!m&&OWNER&&em===OWNER){ m={role:'staff',name:'Owner'}; try{ await FB.fs.doc('members/'+em).set({role:'staff',name:u.displayName||'Owner',added:new Date().toISOString()},{merge:true}); }catch(e){} }
-    if(!m){ FB.state='pending'; try{ FB.requested=(await FB.fs.doc('requests/'+em).get()).exists; }catch(e){} S.tab='hub'; render(); return; }
+    if(!m){ FB.state='pending'; S.tab='hub'; render();
+      // if staff add this email while the person is waiting, let them straight in
+      FB.fs.doc('members/'+em).onSnapshot(s=>{ if(s.exists) location.reload(); },()=>{});
+      return; }
     const role=(m.role==='staff'||em===OWNER)?'staff':'member';
     if(idleCheck(role)) return;
     ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,markActive,{passive:true}));
