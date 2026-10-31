@@ -8,11 +8,12 @@ No programming, no paid tools, no AI assistant.
 | To change… | Go to |
 |---|---|
 | Who can sign in, staff, admins | Admin 🔑 → People & access |
-| The roster (one person) | Roster tab → Edit on that row |
+| The roster (one person) | UMD tab → Edit on that row |
 | The whole roster at the start of a semester | Admin 🔑 → New semester → step 2 (paste the UMD from Excel) |
 | A UMD that names jobs or sections differently | Admin 🔑 → Site settings → UMD name translations |
-| Flight names, OCONUS deadlines | Admin 🔑 → Site settings |
-| Weekly outlook, SDO, CQ, taskers | Sq Staff tabs (paste from Excel) |
+| Flight names, OCONUS deadlines, AF 1206 categories and line limits | Admin 🔑 → Site settings |
+| Weekly outlook, SDO, taskers | Sq Staff tabs (paste from Excel) |
+| CQ sign-ups | Sq Staff → Staff Supt → CQ shifts: upload the CQ spreadsheet (.xlsx) or paste its cells |
 | A-staff weekly pattern | Sq Staff → Chief of Staff |
 | Leadership names, phones, emails, links | Squadron Info → Edit |
 | A4/6 rates, caps, POCs, passcode | A4/6 → Settings |

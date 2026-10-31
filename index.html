@@ -293,7 +293,7 @@ button.step{cursor:pointer}
 </header>
 <main class="wrap" id="main"><div class="empty">Loading the squadron's data…</div></main>
 <div id="toast" class="toast" hidden></div>
-<script>window.CS12_VERSION='2026-10-30';</script>
+<script>window.CS12_VERSION='2026-10-31';</script>
 <script>
 "use strict";
 /* ---------- tiny DOM helper ---------- */
@@ -383,7 +383,7 @@ const SO_WINDOW=1; // live: trips not over yet (the calendar and monthly log fet
 const COLS={
   dirt:{path:'dirt',newest:40}, photos:{path:'photos',newest:48},
   signout:{path:'signout',since:()=>daysAgoIso(SO_WINDOW),max:800},
-  headsup:{path:'headsup',newest:250}, mine:{path:()=>'data/users/'+S.uid,newest:150,need:()=>!!S.uid},
+  headsup:{path:'headsup',newest:250}, mine:{path:()=>'data/users/'+S.uid,newest:400,need:()=>!!S.uid},
   ldr:{path:'ldrtasks',newest:150,shape:'ldrtasks'}, ldrOpen:{path:'ldrtasks',eq:'open',max:300,shape:'ldrtasks'},
   actions:{path:'actions',eq:'open',max:200},
   discipline:{path:'discipline',newest:300,need:()=>S.canEdit}
@@ -414,7 +414,7 @@ const SHAPES={
   'grids/rooming':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'grids/coc':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'week/astaff':{weekly:{__map__:['']}},
-  'config/meta':{soK:false,hs2so:false,pruned:''},'config/settings':{flights:'',rename:[{from:'',to:''}],oconus:{thanks:'',winter:''}},'staff/meta':{lastBackup:'',lastBackupBy:''},'staff/turnover':{term:'',started:'',by:'',done:{__map__:null}},
+  'config/meta':{soK:false,hs2so:false,pruned:''},'config/settings':{flights:'',rename:[{from:'',to:''}],oconus:{thanks:'',winter:''},b1206:{names:[''],lines:0,perBullet:0}},'staff/meta':{lastBackup:'',lastBackupBy:''},'staff/turnover':{term:'',started:'',by:'',done:{__map__:null}},
   'staff/exports':{exec:{__map__:null},shirt:{__map__:null}},
   'a46/vault':null,'staff/a46import':null
 };
@@ -480,7 +480,7 @@ async function copy(text){ try{ await navigator.clipboard.writeText(text); toast
 
 /* ---------- tabs ---------- */
 const TABS=[
-  ['home','Dozen Daily'],['me','My Squadron'],['builder','Paperwork Builder'],['duty','Duty'],['roster','Roster'],
+  ['home','Dozen Daily'],['me','My Squadron'],['builder','Paperwork Builder'],['duty','Duty'],['roster','UMD'],
   ['life','Squadron Life'],['links','Squadron Info'],['sqstaff','Sq Staff 🔒'],['a46','A4/6 🔒']
 ];
 function go(t){ S.tab=t; try{ history.replaceState(null,'','#'+t) }catch(e){} ls('tab',t); render(); window.scrollTo({top:0}); }
@@ -771,7 +771,7 @@ VIEWS.roster=function(){
   if(cur==='umd') body=umdView();
   else if(cur==='coc') body=gridView('grids/coc');
   else { const p=D('life/pairings'); body=p? h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Supervisor (’'+clsToYear('C3C').slice(2)+')'),h('th',null,'Flight'),h('th',null,'Supervisee(s) (’'+clsToYear('C4C').slice(2)+')'))),h('tbody',null,p.rows.map(r=>h('tr',null,h('td',{style:'font-weight:600'},r.sup),h('td',null,r.flight),h('td',null,r.sees.join(' · '))))))) : emptyState('No pairings yet.'); }
-  return h('div',{class:'stack'},head('Roster','Unit manning, chain of command and supervisor pairings.',segEl),h('div',{class:'row small muted'},'Class colors:',classLegend()),body);
+  return h('div',{class:'stack'},head('UMD','Unit manning, chain of command and supervisor pairings.',segEl),h('div',{class:'row small muted'},'Class colors:',classLegend()),body);
 };
 function umdView(){
   const r=D('roster/main'); if(!r) return emptyState('No roster yet.');
@@ -1479,10 +1479,10 @@ function builderMemo(){
   );
 }
 
-const DOCTYPES=[['memo','Memo / MFR','Tongue and Quill memorandum on CS-12 letterhead'],['esss','eSSS + Form 99','AF 1768 staff summary sheet routed by class year, with a Form 99 if you’re leaving Colorado'],['f174','AF 174','Record of Individual Counseling'],['f10','Form 10','Report of Conduct'],['oconus','OCONUS package','eSSS, Form 99, itinerary, FCG and FP plans as one Adobe portfolio']];
+const DOCTYPES=[['memo','Memo / MFR','Tongue and Quill memorandum on CS-12 letterhead'],['esss','eSSS + Form 99','AF 1768 staff summary sheet routed by class year, with a Form 99 if you’re leaving Colorado'],['f174','AF 174','Record of Individual Counseling'],['f10','Form 10','Report of Conduct'],['oconus','OCONUS package','eSSS, Form 99, itinerary, FCG and FP plans as one Adobe portfolio'],['f1206','AF 1206','Award nomination: bullets in the three CS-12 categories, 9-line limit, pulls from your bullet log']];
 VIEWS.builder=function(){
   if(S.sub.doc==='f99') S.sub.doc='esss'; const cur=S.sub.doc||'memo';
-  const body=({memo:builderMemo,esss:builderEsss,f99:builderF99,f174:builderF174,f10:builderF10,oconus:()=>VIEWS.oconus(true)}[cur]||builderMemo)();
+  const body=({memo:builderMemo,esss:builderEsss,f99:builderF99,f174:builderF174,f10:builderF10,f1206:builder1206,oconus:()=>VIEWS.oconus(true)}[cur]||builderMemo)();
   return h('div',{class:'stack'},
     head('Paperwork Builder','Fill in the blanks and download a signable PDF. Your drafts stay saved in this browser until you clear them.'),
     lfDatalist('bnames'), nameDatalist('rnames'),
@@ -1492,7 +1492,7 @@ VIEWS.builder=function(){
       h('li',null,'Open the PDF and check it over. Each signature box can be signed with your CAC in Adobe.'),
       h('li',null,'eSSS: make a Teams chat named ',h('span',{class:'mono'},'Last Name, Date, eSSS'),' with your chain up to the Squadron Exec (no permanent party or Squadron Commander), post the PDF and @ the first person.'),
       h('li',null,'Everything else: upload it to your staff folder in the Division Chiefs Teams channel and tag PP, the same as always.'))),
-    cur==='oconus'?null:h('div',{class:'row'},h('span',{class:'spacer'}),confirmBtn('Clear this draft',()=>{ const key={memo:'memo',esss:'esss',f99:'f99',f174:'f174',f10:'f10'}[cur]; delete B[key]; ls('builder',B); render(); },'btn sm'))
+    cur==='oconus'?null:h('div',{class:'row'},h('span',{class:'spacer'}),confirmBtn('Clear this draft',()=>{ const key={memo:'memo',esss:'esss',f99:'f99',f174:'f174',f10:'f10',f1206:'f1206'}[cur]; delete B[key]; ls('builder',B); render(); },'btn sm'))
   );
 };
 </script>
@@ -1749,7 +1749,8 @@ async function sendHeadsUp(kind,from,subject,routing,extra='',suspense=''){
   if(!names.length) return;
   await setDoc('headsup/'+uid(),{kind,from,subject,extra,suspense:suspense||'',routing:names,signed:{},status:'Active',created:new Date().toISOString(),by:S.uid||null});
 }
-function cqDateFor(w,col){ const yr=new Date().getFullYear(); const lbl=col<4?w.label:w.weLabel; const m=(lbl||'').match(/(\d{1,2})\/(\d{1,2})/); if(!m) return null; const d=new Date(yr,+m[1]-1,+m[2],12); d.setDate(d.getDate()+(col<4?col:col-4)); return iso(d); }
+function nearYear(mo,dy){ const n=new Date(); let best=null; for(const y of [n.getFullYear()-1,n.getFullYear(),n.getFullYear()+1]){ const d=new Date(y,mo-1,dy,12); if(!best||Math.abs(d-n)<Math.abs(best-n)) best=d; } return best; }
+function cqDateFor(w,col){ const lbl=col<4?w.label:w.weLabel; const m=(lbl||'').match(/(\d{1,2})\/(\d{1,2})/); if(!m) return null; const d=nearYear(+m[1],+m[2]); d.setDate(d.getDate()+(col<4?col:col-4)); return iso(d); }
 function myCq(name){ const q=D('cq/board'); if(!q) return []; const fill=q.fill||{}; const nick=[...q.c28,...q.c29].find(p=>sameName(p.name,name)); const out=[];
   q.weeks.forEach(w=>w.rows.forEach(r=>r.slots.forEach((sl,col)=>{ const v=fill[sl.id]; if(!v) return; if(!(sameName(v,name)||(nick&&nick.nick&&norm(v)===norm(nick.nick)))) return; const d=cqDateFor(w,col); out.push({date:d,day:w.days[col],time:col<4?r.wd:r.we}); })));
   return out.filter(x=>x.date).sort((a,b)=>a.date.localeCompare(b.date)); }
@@ -1809,11 +1810,14 @@ VIEWS.me=function(){
   const acts=(S.actions||[]).filter(a=>!a.done&&sameName(a.owner,name));
   const ldr=(S.ldrOpen||[]).filter(x=>x.status!=='Done'&&sameName(x.assignee,name)).sort((a,b)=>(a.due||'9').localeCompare(b.due||'9'));
   const tkAll=(myTaskerList(name)||[]).sort((a,b)=>a.done-b.done||(tkDue(a.c)||'9').localeCompare(tkDue(b.c)||'9')); const tk=tkAll.filter(x=>!x.done); const cq=myCq(name).filter(x=>x.date>=t); const sdo=mySdo(name).filter(d=>d>=t);
+  // CQ shifts are for C2C and C3C, SDO for C1C: only show what applies to this person's class (or anything they're already on)
+  const lvl=String(me.cls||'').toUpperCase().replace(/\s/g,''); const known=CLS_LEVELS.includes(lvl);
+  const showCq=!known||lvl==='C2C'||lvl==='C3C'||cq.length>0, showSdo=!known||lvl==='C1C'||sdo.length>0;
   const meCol=`data/users/${S.uid}`;
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
     head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the access list (Admin tab).'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
-    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
+    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),showCq?h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')):null,showSdo?h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—')):null),
     myWeekPanel(name),
     h('div',{class:'grid2'},
       h('div',{class:'panel'},h('h3',null,'My eSSS trips'),h('p',{class:'small muted',style:'margin-top:-4px'},'Your upcoming trips on the eSSS tracker. They add themselves when you download an eSSS or OCONUS package (unless it’s a practice run).'),
@@ -1830,9 +1834,10 @@ VIEWS.me=function(){
           todos.map(d=>h('li',null,h('input',{type:'checkbox',checked:d.done,onchange:e=>S.db.doc(`${meCol}/${d.id}`).update({done:e.target.checked}).catch(dbErr)}),h('div',{class:'grow',style:d.done?'text-decoration:line-through;color:var(--muted)':''},d.text,d.due?h('div',{class:'small',style:`color:${!d.done&&d.due<t?'var(--coral)':'var(--muted)'}`},'due '+fmtShort(d.due)):null),confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))),
         !acts.length&&!ldr.length&&!(tk&&tk.length)&&!todos.length?h('p',{class:'muted'},'All clear. Staff action items and incomplete taskers with your name show up here too.'):null,
         h('p',{class:'small muted',style:'margin:8px 0 0'},'Your to-dos are private to you.'))),
-    h('div',{class:'grid2'},
-      h('div',{class:'panel'},h('h3',null,'My CQ shifts'),cq.length?h('ul',{class:'list'},cq.slice(0,10).map(x=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(x.date)),h('span',{class:'grow'},x.day),h('span',{class:'mono small'},x.time)))):h('p',{class:'muted'},'No upcoming CQ shifts with your name.'),h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{S.sub.duty='cq';go('duty')}},'CQ sign-up')),
-      h('div',{class:'panel'},h('h3',null,'My SDO days'),sdo.length?h('ul',{class:'list'},sdo.slice(0,10).map(d=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(d)),h('span',{class:'grow'},new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'long'}))))):h('p',{class:'muted'},'No upcoming SDO days with your name.'))),
+    bulletLogPanel(meCol),
+    (showCq||showSdo)?h('div',{class:showCq&&showSdo?'grid2':''},
+      !showCq?null:h('div',{class:'panel'},h('h3',null,'My CQ shifts'),cq.length?h('ul',{class:'list'},cq.slice(0,10).map(x=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(x.date)),h('span',{class:'grow'},x.day),h('span',{class:'mono small'},x.time)))):h('p',{class:'muted'},'No upcoming CQ shifts with your name.'),h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{S.sub.duty='cq';go('duty')}},'CQ sign-up')),
+      !showSdo?null:h('div',{class:'panel'},h('h3',null,'My SDO days'),sdo.length?h('ul',{class:'list'},sdo.slice(0,10).map(d=>h('li',null,h('span',{class:'mono small',style:'width:90px;flex:none'},fmtShort(d)),h('span',{class:'grow'},new Date(d+'T12:00').toLocaleDateString('en-US',{weekday:'long'}))))):h('p',{class:'muted'},'No upcoming SDO days with your name.'))):null,
     leaderPanel(name),
     myDraftsPanel(meCol)
   );
@@ -2216,21 +2221,101 @@ function cqSlotFor(d,time){ const q=D('cq/board'); if(!q) return null; const T=n
   for(const w of q.weeks){ for(let col=0;col<7;col++){ if(cqDateFor(w,col)!==d) continue;
       for(const r of w.rows){ if(normTime(col<4?r.wd:r.we)===T){ const sl=r.slots[col]; if(sl) return sl; } } } }
   return null; }
+/* ---------- CQ: upload the CQ sign-up spreadsheet (or paste its cells) and update the sign-ups ----------
+   Reads the sheet laid out the usual way: a row starting "(11/2-11/5)" with the weekday names, then a "(11/6-11/8)"
+   cell with Friday-Sunday, then one row per shift (time on the left of each half). Red cells are "do not fill". */
+const CQ_LABEL=/^\(?\s*(\d{1,2})\/(\d{1,2})\s*[-–]\s*(\d{1,2})\/(\d{1,2})\s*\)?$/;
+const CQ_TIME=/^\d{3,4}\s*[-–]\s*(\d{3,4}|taps)$/i;
+const cqKey=l=>{ const m=CQ_LABEL.exec(String(l||'').trim()); return m?`${+m[1]}/${+m[2]}-${+m[3]}/${+m[4]}`:''; };
+// read an .xlsx file in the browser (JSZip is already on the page): every sheet as rows of {v, red}
+async function readXlsx(file){
+  const zip=await JSZip.loadAsync(await file.arrayBuffer()); const P=new DOMParser(); const xml=async n=>{ const f=zip.file(n); return f?P.parseFromString(await f.async('string'),'application/xml'):null; };
+  const tags=(d,t)=>d?[...d.getElementsByTagName(t)]:[];
+  const ss=tags(await xml('xl/sharedStrings.xml'),'si').map(si=>tags(si,'t').map(t=>t.textContent).join(''));
+  const st=await xml('xl/styles.xml'); const fillsEl=st&&st.getElementsByTagName('fills')[0]; const xfsEl=st&&st.getElementsByTagName('cellXfs')[0];
+  const isRed=fill=>{ const fg=fill&&fill.getElementsByTagName('fgColor')[0]; if(!fg) return false; const rgb=(fg.getAttribute('rgb')||'').slice(-6); if(rgb){ const r=parseInt(rgb.slice(0,2),16),g=parseInt(rgb.slice(2,4),16),b=parseInt(rgb.slice(4,6),16); return r>=190&&g<=90&&b<=90; } return fg.getAttribute('indexed')==='10'; };
+  const fills=fillsEl?tags(fillsEl,'fill'):[]; const xfRed=(xfsEl?tags(xfsEl,'xf'):[]).map(x=>isRed(fills[+x.getAttribute('fillId')||0]));
+  const wb=await xml('xl/workbook.xml'), rels=await xml('xl/_rels/workbook.xml.rels');
+  const target=id=>{ const r=tags(rels,'Relationship').find(x=>x.getAttribute('Id')===id); const t=r?r.getAttribute('Target'):''; return t.startsWith('/')?t.slice(1):'xl/'+t; };
+  const colNum=ref=>{ let n=0; for(const ch of ref.replace(/\d+/g,'')) n=n*26+ch.charCodeAt(0)-64; return n-1; };
+  const sheets=[];
+  for(const sh of tags(wb,'sheet')){ const d=await xml(target(sh.getAttribute('r:id')||sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id'))); if(!d) continue; const rows=[];
+    for(const c of tags(d,'c')){ const ref=c.getAttribute('r')||''; const r=(+ref.replace(/\D+/g,''))-1, col=colNum(ref); const t=c.getAttribute('t'); const v=c.getElementsByTagName('v')[0];
+      let val=t==='s'?ss[+(v&&v.textContent)]||'':t==='inlineStr'?tags(c,'t').map(x=>x.textContent).join(''):v?v.textContent:'';
+      (rows[r]=rows[r]||[])[col]={v:String(val).replace(/ /g,' ').trim(),red:!!xfRed[+c.getAttribute('s')||0]}; }
+    sheets.push({name:sh.getAttribute('name'),rows:[...rows].map(r=>[...(r||[])].map(c=>c||{v:'',red:false}))}); }
+  return sheets;
+}
+// turn the grid into weeks of shifts
+function parseCqGrid(rows){
+  const weeks=[]; let w=null;
+  rows.forEach(r=>{ if(!r) return; const v=r.map(c=>(c&&c.v)||'');
+    const L=v.findIndex(x=>CQ_LABEL.test(x)); const W=L>=0?v.findIndex((x,i)=>i>L&&CQ_LABEL.test(x)):-1;
+    if(L>=0&&W>L){ w={label:v[L],weLabel:v[W],L,W,days:[...v.slice(L+1,W),...v.slice(W+1,W+4)].map(x=>x||''),rows:[]}; weeks.push(w); return; }
+    if(!w) return; const tl=(v[w.L]||'').trim(), tr=(v[w.W]||'').trim();
+    if(!CQ_TIME.test(tl)&&!CQ_TIME.test(tr)) return; // month titles, blank rows
+    const cell=i=>r[i]||{v:'',red:false};
+    w.rows.push({wd:tl,we:tr,cells:[...[1,2,3,4].map(k=>cell(w.L+k)),...[1,2,3].map(k=>cell(w.W+k))]}); });
+  return weeks.filter(x=>x.rows.length);
+}
+// compare with the CQ board: what to add, change or clear
+function cqDiff(weeks,opts){
+  const q=D('cq/board')||{weeks:[],fill:{}}; const fill=q.fill||{}; const byKey=new Map(q.weeks.map(x=>[cqKey(x.label),x]));
+  const changes=[], newWeeks=[], marks=[]; let same=0, blocked=0;
+  for(const wk of weeks){ let bw=byKey.get(cqKey(wk.label));
+    if(!bw){ const key=cqKey(wk.label).replace(/\W/g,'_'); const [mo,dy]=cqKey(wk.label).split('-')[0].split('/').map(Number);
+      bw={label:wk.label,weLabel:wk.weLabel.replace(/[()]/g,''),days:wk.days.map((d,i)=>d||['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][i]),month:MONTHS[mo-1],
+        rows:wk.rows.map((r,i)=>({wd:r.wd,we:r.we,slots:r.cells.map((c,j)=>({id:`u${key}_${i}_${j}`,k:c.red?'x':'',w:j<4?'wd':'we'}))}))}; newWeeks.push(bw); }
+    wk.rows.forEach((r,i)=>{ const br=bw.rows[i]; if(!br) return; r.cells.forEach((c,j)=>{ const sl=br.slots[j]; if(!sl) return; const date=cqDateFor(bw,j), time=j<4?br.wd:br.we;
+      if(opts.colors&&!newWeeks.includes(bw)&&(c.red!==(sl.k==='x'))&&!c.v) marks.push({id:sl.id,k:c.red?'x':'',date,time});
+      const cur=fill[sl.id]||''; const name=(c.v||'').slice(0,60);
+      if(sl.k==='x'&&!name){ blocked++; return; }
+      if(name&&norm(name)!==norm(cur)) changes.push({id:sl.id,from:cur,to:name,date,time});
+      else if(!name&&cur&&opts.clear) changes.push({id:sl.id,from:cur,to:'',date,time});
+      else if(name) same++; }); }); }
+  return {changes,newWeeks,marks,same,blocked};
+}
 function cqPasteBox(){
-  const st=S.edit.cqPaste||(S.edit.cqPaste={text:'',rows:null});
-  const read=()=>{ const g=parseTSV(st.text).filter(r=>r.some(Boolean)); const rows=[];
-    g.forEach((r,i)=>{ const ti=r.findIndex(c=>/^\d{3,4}\s*[-–]\s*(\d{3,4}|taps)$/i.test(c.trim())); const d=parseDay(r.find(c=>parseDay(c))||'');
+  const st=S.edit.cqPaste||(S.edit.cqPaste={text:'',weeks:null,clear:false,err:'',colors:false});
+  const useRows=(rows,colors,src)=>{ const weeks=parseCqGrid(rows); if(weeks.length){ st.weeks=weeks; st.colors=colors; st.src=src; st.err=''; st.rows=null; } else { st.weeks=null; st.err='No CQ weeks found. Use the sheet with rows like “(11/2-11/5) | Monday | … | (11/6-11/8) | Friday | Saturday | Sunday”.'; } render(); };
+  const onFile=async e=>{ const f=e.target.files[0]; if(!f) return;
+    if(/^image\//.test(f.type)){ st.err='That’s a picture. The site can’t read names out of a screenshot reliably, so it uses the spreadsheet itself: upload the .xlsx file, or select the cells in Excel, copy, and paste them below.'; st.weeks=null; return render(); }
+    try{ if(/\.csv$/i.test(f.name)){ useRows(parseTSV((await f.text()).replace(/,/g,'\t')).map(r=>r.map(v=>({v,red:false}))),false,f.name); return; }
+      const sheets=await readXlsx(f); let best=null; sheets.forEach(sh=>{ const n=parseCqGrid(sh.rows).length; if(n&&(!best||n>best.n)) best={sh,n}; });
+      if(!best){ st.err='Couldn’t find CQ weeks in that file.'; st.weeks=null; return render(); } useRows(best.sh.rows,true,f.name+' · '+best.sh.name); }
+    catch(x){ console.warn(x); st.err='Couldn’t read that file. Save it as .xlsx and try again, or copy and paste the cells.'; st.weeks=null; render(); } };
+  const onPaste=()=>{ const g=parseTSV(st.text); const grid=g.map(r=>r.map(v=>({v,red:false})));
+    if(parseCqGrid(grid).length) return useRows(grid,false,'pasted cells');
+    // fallback: the older three-column paste (date, shift, name)
+    const rows=[]; g.filter(r=>r.some(Boolean)).forEach((r,i)=>{ const ti=r.findIndex(c=>CQ_TIME.test(c.trim())); const d=parseDay(r.find(c=>parseDay(c))||'');
       if(!d||ti<0){ if(!(i===0&&/date|day/i.test(r.join(' ')))) rows.push({bad:true,raw:r.join(' | ')}); return; }
       const name=(r.find((c,ci)=>ci!==ti&&c&&!parseDay(c))||'').slice(0,60); const sl=cqSlotFor(d,r[ti]);
       rows.push(!sl?{d,time:r[ti],name,miss:'No matching shift on the CQ sheet'}:sl.k==='x'?{d,time:r[ti],name,miss:'That slot is marked “do not fill”'}:{d,time:r[ti],name,id:sl.id}); });
-    st.rows=rows; render(); };
+    st.rows=rows; st.weeks=null; st.err=''; render(); };
+  const diff=st.weeks?cqDiff(st.weeks,{clear:st.clear,colors:st.colors}):null;
   const good=(st.rows||[]).filter(x=>x.id), skip=(st.rows||[]).filter(x=>!x.id);
+  const save=async()=>{
+    if(diff.newWeeks.length||diff.marks.length){ const ok=await mutDoc('cq/board',b=>{ const have=new Set(b.weeks.map(x=>cqKey(x.label)));
+        diff.newWeeks.forEach(w=>{ if(!have.has(cqKey(w.label))) b.weeks.push(w); });
+        const mk=new Map(diff.marks.map(m=>[m.id,m.k])); b.weeks.forEach(w=>w.rows.forEach(r=>r.slots.forEach(sl=>{ if(mk.has(sl.id)) sl.k=mk.get(sl.id)||(sl.k==='x'?'':sl.k); })));
+        b.weeks.sort((a,c)=>(cqDateFor(a,0)||'').localeCompare(cqDateFor(c,0)||'')); return b; }); if(!ok) return; }
+    if(diff.changes.length){ const at=Date.now(), patch={}; diff.changes.forEach(c=>patch[c.id]={v:c.to,by:FB.user.uid,at});
+      try{ await withRetry(()=>FB.fs.doc('cqfill/all').set(patch,{merge:true})); }catch(e){ return toast('Only staff can update the whole CQ sheet.'); } }
+    toast(`CQ sign-ups updated: ${diff.changes.length} shift${diff.changes.length===1?'':'s'}`+(diff.newWeeks.length?`, ${diff.newWeeks.length} new week${diff.newWeeks.length===1?'':'s'}`:'')); S.edit.cqPaste=null; render(); };
+  const line=c=>h('li',null,h('span',{class:'mono small',style:'width:120px;flex:none'},`${fmtShort(c.date)} ${c.time}`),h('span',{class:'grow small'},c.from?h('s',{class:'muted'},c.from):h('span',{class:'muted'},'(open)'),' → ',c.to?h('b',null,c.to):h('span',{class:'muted'},'(cleared)')));
   return h('div',null,
-    h('p',{class:'small muted',style:'margin:0 0 6px'},'Copy three columns from Excel: date, shift time (like 1600-1800 or 2200-TAPS) and name. A blank name clears the shift.'),
-    h('textarea',{id:'cqpaste',rows:5,value:st.text,oninput:e=>st.text=e.target.value,onpaste:()=>setTimeout(()=>{ st.text=$('#cqpaste').value; read(); },0)},st.text),
-    st.rows?h('div',{class:'small',style:'margin:6px 0'},`${good.length} shift${good.length===1?'':'s'} matched`,skip.length?h('div',{class:'muted'},`${skip.length} skipped: `+skip.slice(0,4).map(x=>x.bad?`“${x.raw}” (couldn’t read the date or time)`:`${fmtShort(x.d)} ${x.time} (${x.miss})`).join('; ')+(skip.length>4?'…':'')):null):null,
-    h('div',{class:'row'},h('button',{class:'btn',onclick:read},'Preview'),
-      good.length?h('button',{class:'btn pri',onclick:async()=>{ for(const x of good){ if(typeof cqWrite==='function') await cqWrite(x.id,x.name); else await upd('cq/board',{fill:{[x.id]:x.name}}); } toast(`CQ schedule updated (${good.length} shifts)`); S.edit.cqPaste=null; render(); }},'Save to CQ schedule'):null));
+    h('p',{class:'small muted',style:'margin:0 0 6px'},'Upload the CQ sign-up spreadsheet (.xlsx), or select its cells in Excel, copy, and paste them here. You’ll see every change before anything is saved. New weeks in the sheet are added to the CQ board, and with an .xlsx file the red cells become “do not fill”.'),
+    h('div',{class:'row',style:'margin-bottom:6px'},h('input',{type:'file',accept:'.xlsx,.csv,image/*',onchange:onFile})),
+    h('textarea',{id:'cqpaste',rows:4,placeholder:'…or paste the copied cells here',value:st.text,oninput:e=>st.text=e.target.value,onpaste:()=>setTimeout(()=>{ st.text=$('#cqpaste').value; onPaste(); },0)},st.text),
+    h('button',{class:'btn sm',style:'margin-top:6px',onclick:()=>{ st.text=($('#cqpaste')||{}).value||st.text; onPaste(); }},'Preview'),
+    st.err?h('div',{class:'banner warn small',style:'margin-top:6px'},st.err):null,
+    diff?h('div',{class:'stack',style:'margin-top:8px;gap:6px'},
+      h('div',{class:'small'},h('b',null,`${st.weeks.length} week${st.weeks.length===1?'':'s'} read`),` from ${st.src} · `,h('b',null,`${diff.changes.length} change${diff.changes.length===1?'':'s'}`),` · ${diff.same} already match`,diff.newWeeks.length?` · ${diff.newWeeks.length} new week${diff.newWeeks.length===1?'':'s'} to add`:'',diff.marks.length?` · ${diff.marks.length} cell${diff.marks.length===1?'':'s'} change red/open`:''),
+      diff.changes.length?h('ul',{class:'list',style:'max-height:260px;overflow:auto'},diff.changes.map(line)):null,
+      h('label',{class:'small',style:'display:flex;gap:6px;align-items:center'},h('input',{type:'checkbox',checked:st.clear,onchange:e=>{ st.clear=e.target.checked; render(); }}),'Also clear sign-ups that are blank in the sheet (leave unticked to keep people who signed up on the site)'),
+      h('div',{class:'row'},h('button',{class:'btn pri',disabled:!(diff.changes.length||diff.newWeeks.length||diff.marks.length)||null,onclick:save},'Update CQ sign-ups'),h('button',{class:'btn',onclick:()=>{ S.edit.cqPaste=null; render(); }},'Cancel'))):null,
+    st.rows?h('div',{class:'small',style:'margin:6px 0'},`${good.length} shift${good.length===1?'':'s'} matched`,skip.length?h('div',{class:'muted'},`${skip.length} skipped: `+skip.slice(0,4).map(x=>x.bad?`“${x.raw}” (couldn’t read the date or time)`:`${fmtShort(x.d)} ${x.time} (${x.miss})`).join('; ')+(skip.length>4?'…':'')):null,
+      good.length?h('button',{class:'btn pri',style:'margin-top:6px',onclick:async()=>{ for(const x of good) await cqWrite(x.id,x.name); toast(`CQ schedule updated (${good.length} shifts)`); S.edit.cqPaste=null; render(); }},'Save to CQ schedule'):null):null);
 }
 function suptPastePanel(){
   const [w,wseg]=seg('suptpaste',[['sdo','SDO days'],['cq','CQ shifts']],'sdo');
@@ -2385,6 +2470,155 @@ function monthlyLogPanel(o){ // o: {kind:'exec'|'shirt', title, items:[], monthO
     h('p',{class:'small muted',style:'margin:6px 0 8px'},`Saves every ${o.title} entry from the month as a spreadsheet file for documentation. Keep it in the squadron’s Teams files.`),
     h('div',{class:'row'},h('button',{class:'btn pri',onclick:save},`Download ${monthName(pick)} (${list.length})`),
       rec[pick]?h('span',{class:'small muted'},`Saved by ${rec[pick].by||'staff'} on ${fmtShort((rec[pick].at||'').slice(0,10))}`):h('span',{class:'small muted'},'Not saved yet')));
+}
+</script>
+<script>
+/* ================= BULLETS: personal Bullet log (My Squadron) + AF Form 1206 builder (Paperwork Builder) =================
+   CS-12 1206 rules: three categories, narrative bullets (complete sentences that still follow Action, Impact, Result),
+   9 lines total on the form including the 3 category headers, so 6 lines of bullets and no bullet longer than 2 lines.
+   Lines are measured with Times New Roman 12 pt across the width of the 1206 "Specific Accomplishments" box, the way the
+   official form prints. The bullet log is private: it lives in each person's own data/users/{uid} records. */
+// category names and line limits can be changed by an admin in Admin → Site settings (no code)
+const BULLET_DEFAULTS={names:['Leadership in Primary Duties','Significant Self-Improvement','Base/Community Involvement'],lines:9,perBullet:2};
+const b1206Set=()=>{ const s=(siteSettings().b1206)||{}; return {names:BULLET_DEFAULTS.names.map((n,i)=>((s.names||[])[i]||'').trim()||n),lines:+s.lines||BULLET_DEFAULTS.lines,perBullet:+s.perBullet||BULLET_DEFAULTS.perBullet}; };
+const BULLET_CATS=new Proxy([],{get(t,p){ const a=['lead','self','comm'].map((k,i)=>[k,b1206Set().names[i]]); const v=a[p]; return typeof v==='function'?v.bind(a):v; }});
+const catLabel=k=>(BULLET_CATS.find(c=>c[0]===k)||['',''])[1];
+const F1206={get lines(){ return b1206Set().lines; },get perBullet(){ return b1206Set().perBullet; },width:566,size:12}; // 202.3 mm box less its inside margins, in points
+let _bfont=null, _bfontP=null;
+function bulletFont(){ if(_bfont) return _bfont; if(!_bfontP&&window.PDFLib){ _bfontP=PDFLib.PDFDocument.create().then(d=>d.embedFont(PDFLib.StandardFonts.TimesRoman)).then(f=>{ _bfont=f; render(); }).catch(e=>console.warn(e)); } return null; }
+// split text into the lines it takes on the 1206
+function wrap1206(text){ const f=bulletFont(); const W=s=>f?f.widthOfTextAtSize(s,F1206.size):s.length*5.35;
+  const out=[]; let line=''; for(const word of String(text||'').replace(/\s+/g,' ').trim().split(' ')){ if(!word) continue; const t=line?line+' '+word:word;
+    if(W(t)<=F1206.width){ line=t; continue; } if(line) out.push(line); line=word;
+    while(W(line)>F1206.width){ let i=line.length; while(i>1&&W(line.slice(0,i))>F1206.width) i--; out.push(line.slice(0,i)); line=line.slice(i); } }
+  if(line) out.push(line); return out; }
+const bulletText=t=>'- '+String(t||'').replace(/^\s*[-–•]\s*/,'').replace(/\s+/g,' ').trim();
+const linesOf=t=>String(t||'').trim()?wrap1206(bulletText(t)).length:0;
+function lineChip(n,max){ return h('span',{class:'chip '+(n>max?'Returned':n?'Approved':'Drafted'),'data-max':max},n?`${n} line${n===1?'':'s'}${n>max?` (max ${max})`:''}`:'empty'); }
+// update a line counter while typing, without redrawing the page (keeps the cursor where it is)
+function liveCount(el,text,max){ if(!el) return; const n=linesOf(text); el.className='chip '+(n>max?'Returned':n?'Approved':'Drafted'); el.textContent=n?`${n} line${n===1?'':'s'}${n>max?` (max ${max})`:''}`:'empty'; }
+
+const BULLET_QUESTIONS=['Were you the lead?','Did you manage a team? How many members?','Did you increase or decrease part of an existing process? By how much (%)?','How much time went into this?','What larger organization benefited?','How many people were positively impacted?','Did you represent a group or unit at a high-level interaction? (collect the 5W’s)','How many taskers did you complete during the event or position?','Did you create the “first” of anything?','Does this have a larger impact in the future? What is it?','Did you volunteer?','Have you received any awards, decorations or recognition?'];
+const BULLET_RULES_FN=()=>['Narrative: complete sentences, not a list of fragments, still in Action → Impact → Result order.','Action: what you did. Impact: the specifics of it. Result: who or what was better off because of it.','Numbers make the bullet: hours, people, percentages, counts.',`On the 1206: three category headers + up to ${F1206.lines-3} lines of bullets (${F1206.lines} lines total). No bullet longer than ${F1206.perBullet} line${F1206.perBullet===1?'':'s'}.`];
+const BULLET_EXAMPLE='C4C Doe committed 15+ hrs to build Knowledge Test study materials, creating 6 typing tests and 28 Kahoots with 2,032 questions; collocated 58.8% of Contrails and 46.1% of CS&D into one resource for 120 classmates.';
+function bulletHelp(open){ return h('details',{class:'box',open:open||null},h('summary',null,'How to write a good bullet'),
+  h('div',{class:'small',style:'margin-top:8px'},h('ul',{style:'margin:0 0 8px;padding-left:18px'},BULLET_RULES_FN().map(r=>h('li',null,r))),
+    h('b',null,'Questions to ask yourself'),h('ul',{style:'margin:4px 0 8px;padding-left:18px'},BULLET_QUESTIONS.map(q=>h('li',null,q))),
+    h('b',null,'Example (2 lines)'),h('p',{style:'margin:4px 0 0;font-family:"Times New Roman",serif;font-size:14px'},bulletText(BULLET_EXAMPLE)))); }
+
+/* ---------- Bullet log on My Squadron (private) ---------- */
+function myBullets(){ return (S.mine||[]).filter(d=>d.id.startsWith('bullet_')).map(d=>({...d,cat:BULLET_CATS.some(c=>c[0]===d.cat)?d.cat:'lead'})).sort((a,b)=>(b.date||'').localeCompare(a.date||'')); }
+function termStart(){ const d=new Date(), y=d.getFullYear(), m=d.getMonth(); return m>=7?`${y}-08-01`:m<=4?`${y}-01-01`:`${y}-06-01`; }
+function bulletLogPanel(meCol){
+  const st=S.edit.blog||(S.edit.blog={open:false,f:{date:today(),cat:'lead',action:'',impact:'',result:'',text:''},range:'term',edit:null});
+  const all=myBullets(); const list=st.range==='term'?all.filter(b=>(b.date||'')>=termStart()):all;
+  const f=st.f;
+  const compose=()=>{ const a=(f.action||'').trim(), i=(f.impact||'').trim(), r=(f.result||'').trim(); if(!a) return toast('Start with the action: what did you do?');
+    f.text=[a.replace(/[.;]\s*$/,''),i?', '+i.replace(/^[,;]\s*/,'').replace(/[.;]\s*$/,''):'',r?'; '+r.replace(/^[,;]\s*/,'').replace(/\.\s*$/,''):''].join('')+'.'; render(); };
+  const save=async()=>{ const text=(f.text||'').trim()||[f.action,f.impact,f.result].filter(x=>x&&x.trim()).join(' '); if(!text) return toast('Write the bullet first (or fill in Action / Impact / Result).');
+    const id=st.edit||('bullet_'+uid()); const rec={kind:'bullet',title:text.slice(0,80),cat:f.cat,date:f.date||today(),action:f.action||'',impact:f.impact||'',result:f.result||'',text,updated:new Date().toISOString()};
+    if(!st.edit) rec.created=rec.updated;
+    try{ if(st.edit) await S.db.doc(`${meCol}/${id}`).update(rec); else await S.db.doc(`${meCol}/${id}`).set(rec); toast('Saved to your bullet log'); S.edit.blog={...st,open:false,edit:null,f:{date:today(),cat:f.cat,action:'',impact:'',result:'',text:''}}; render(); }catch(e){ dbErr(e); } };
+  const ta=(k,ph,rows)=>h('textarea',{rows:rows||2,placeholder:ph,value:f[k]||'',oninput:e=>{ f[k]=e.target.value; if(k==='text') liveCount($('#blcount'),f.text,F1206.perBullet); }},f[k]||'');
+  const counts=BULLET_CATS.map(([k,l])=>[l,list.filter(b=>b.cat===k).length]);
+  return h('div',{class:'panel'},
+    h('div',{class:'row'},h('h3',{style:'margin:0'},'My bullet log'),h('span',{class:'small muted'},'Private to you'),h('span',{class:'spacer'}),
+      h('div',{class:'seg',role:'group'},[['term','This semester'],['all','All']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(st.range===k),onclick:()=>{ st.range=k; render(); }},l))),
+      h('button',{class:'btn sm pri',onclick:()=>{ st.open=!st.open; st.edit=null; render(); }},st.open?'Close':'Log a bullet')),
+    h('p',{class:'small muted',style:'margin:6px 0 8px'},'Write it down when it happens, with the numbers. At award time, pull these straight into a 1206 (Paperwork Builder → AF 1206).'),
+    h('div',{class:'row small',style:'gap:14px;margin-bottom:8px'},counts.map(([l,n])=>h('span',null,h('b',null,String(n)),' '+l))),
+    st.open?h('div',{class:'box',style:'margin-bottom:10px'},
+      h('div',{class:'fgrid'},h('label',{class:'f'},'Date',h('input',{type:'date',value:f.date,oninput:e=>f.date=e.target.value})),
+        h('label',{class:'f'},'Category',h('select',{onchange:e=>{ f.cat=e.target.value; }},BULLET_CATS.map(([k,l])=>{ const o=h('option',{value:k},l); if(f.cat===k) o.selected=true; return o; })))),
+      h('div',{class:'stack',style:'gap:6px;margin-top:8px'},
+        h('label',{class:'f'},'Action: what did you do?',ta('action','Led a 12-person team to …')),
+        h('label',{class:'f'},'Impact: the specifics (numbers!)',ta('impact','40 hours, 3 events, 25% faster …')),
+        h('label',{class:'f'},'Result: who or what was better off?',ta('result','boosted morale for 120 cadets in CS-12 …')),
+        h('div',{class:'row'},h('button',{class:'btn sm',onclick:compose},'Combine into a bullet'),h('span',{class:'small muted'},'Then polish it below into complete sentences.')),
+        h('label',{class:'f'},h('span',null,'Bullet ',h('span',{id:'blcount'},lineChip(linesOf(f.text),F1206.perBullet)),' on a 1206'),ta('text','C4C Doe led … ; …',3))),
+      bulletHelp(false),
+      h('div',{class:'row',style:'margin-top:8px'},h('button',{class:'btn pri',onclick:save},st.edit?'Save changes':'Save to my log'),st.edit?h('button',{class:'btn',onclick:()=>{ st.open=false; st.edit=null; render(); }},'Cancel'):null)):null,
+    list.length?BULLET_CATS.map(([k,l])=>{ const items=list.filter(b=>b.cat===k); return items.length?h('div',null,h('h4',{style:'margin:10px 0 4px'},l),
+      h('ul',{class:'list'},items.map(b=>h('li',null,h('span',{class:'mono small',style:'width:80px;flex:none'},fmtShort(b.date)),
+        h('div',{class:'grow small',style:'font-family:"Times New Roman",serif;font-size:14px'},b.text),lineChip(linesOf(b.text),F1206.perBullet),
+        h('button',{class:'btn sm',onclick:()=>{ st.open=true; st.edit=b.id; st.f={date:b.date||today(),cat:b.cat,action:b.action||'',impact:b.impact||'',result:b.result||'',text:b.text||''}; render(); window.scrollTo({top:0}); }},'Edit'),
+        confirmBtn('×',()=>S.db.doc(`${meCol}/${b.id}`).delete().catch(dbErr)))))):null; })
+      :h('p',{class:'muted'},st.range==='term'?'Nothing logged this semester yet.':'Nothing logged yet.'));
+}
+
+/* ---------- AF Form 1206 builder (Paperwork Builder) ---------- */
+function f1206Defaults(){ const me=typeof identify==='function'?identify():null; const site=D('config/site')||{}; const ldr=((site.leaders&&site.leaders.length)?site.leaders:(typeof LEADERS_DEFAULT!=='undefined'?LEADERS_DEFAULT:[])).find(p=>/commander|aoc/i.test(p.role||''))||{};
+  return {award:'',category:'',period:'',name:me?`${me.cls||''} ${nameParts(me.name).first} ${nameParts(me.name).last}`.trim():'',majcom:'USAFA',dafsc:me&&me.pos?'Cadet / '+me.pos:'Cadet',phone:'',unit:'AFCW/CS-12, USAF Academy, CO 80840',cc:[ldr.name,ldr.phone].filter(Boolean).join(' / '),
+    sec:{lead:[{text:''}],self:[{text:''}],comm:[{text:''}]}}; }
+function f1206Lines(d){ return 3+BULLET_CATS.reduce((a,[k])=>a+d.sec[k].reduce((b,x)=>b+linesOf(x.text),0),0); }
+function f1206Text(d){ return BULLET_CATS.map(([k,l])=>[l.toUpperCase(),...d.sec[k].filter(x=>(x.text||'').trim()).map(x=>bulletText(x.text))].join('\n')).join('\n'); }
+function builder1206(){
+  const d=B.f1206||(B.f1206=f1206Defaults()); BULLET_CATS.forEach(([k])=>{ if(!Array.isArray(d.sec[k])) d.sec[k]=[{text:''}]; });
+  bulletFont();
+  const total=f1206Lines(d); const over=total>F1206.lines; const longOnes=BULLET_CATS.some(([k])=>d.sec[k].some(x=>linesOf(x.text)>F1206.perBullet));
+  const log=myBullets(); const st=S.edit.f1206||(S.edit.f1206={});
+  const meter=()=>h('div',{id:'f1206meter',class:'banner small '+(over?'bad':'info'),style:'margin:0'},h('b',null,`${total} of ${F1206.lines} lines used`),' (3 headers + ',String(total-3),' lines of bullets)',over?' · Too long: cut a bullet or tighten wording.':total<F1206.lines?` · ${F1206.lines-total} line${F1206.lines-total===1?'':'s'} left`:' · Full');
+  const updMeter=()=>{ const n=f1206Lines(d); const m=$('#f1206meter'); if(m){ m.className='banner small '+(n>F1206.lines?'bad':'info'); m.firstChild.textContent=`${n} of ${F1206.lines} lines used`; m.childNodes[2].textContent=String(n-3); } };
+  const section=([k,l])=>h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},l.toUpperCase()),h('span',{class:'spacer'}),
+      log.length?h('select',{'aria-label':'Add from my bullet log','style':'max-width:260px',onchange:e=>{ const b=log.find(x=>x.id===e.target.value); if(!b) return; const empty=d.sec[k].find(x=>!(x.text||'').trim()); if(empty) empty.text=b.text; else d.sec[k].push({text:b.text}); bsave(); render(); }},
+        h('option',{value:''},'Add from my bullet log…'),...BULLET_CATS.map(([ck,cl])=>{ const items=log.filter(b=>b.cat===ck); return items.length?h('optgroup',{label:cl},items.map(b=>h('option',{value:b.id},`${fmtShort(b.date)} · ${b.text.slice(0,70)}${b.text.length>70?'…':''}`))):null; })):null),
+    d.sec[k].map((x,i)=>h('div',{class:'row',style:'align-items:flex-start;margin-top:8px'},h('span',{style:'font-family:"Times New Roman",serif;font-size:16px;padding-top:6px'},'-'),
+      h('textarea',{rows:2,style:'flex:1;font-family:"Times New Roman",serif;font-size:15px','aria-label':`${l} bullet ${i+1}`,value:x.text,oninput:e=>{ x.text=e.target.value; bsave(); liveCount($(`#bc_${k}_${i}`),x.text,F1206.perBullet); updMeter(); updPreview(); }},x.text),
+      h('span',{id:`bc_${k}_${i}`},lineChip(linesOf(x.text),F1206.perBullet)),
+      d.sec[k].length>1?h('button',{class:'btn sm','aria-label':'Remove bullet',onclick:()=>{ d.sec[k].splice(i,1); bsave(); render(); }},'×'):null)),
+    h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{ d.sec[k].push({text:''}); bsave(); render(); }},'+ Add a bullet'));
+  const previewRows=()=>BULLET_CATS.flatMap(([k,l])=>[h('div',{style:'font-weight:700'},l.toUpperCase()),...d.sec[k].filter(x=>(x.text||'').trim()).flatMap(x=>wrap1206(bulletText(x.text)).map(t=>h('div',{class:'pline',style:'white-space:pre'},t)))]);
+  const updPreview=()=>{ const el=$('#f1206rows'); if(el) el.replaceChildren(...previewRows()); };
+  const preview=h('div',{class:'box',style:'background:#fff;color:#000;font-family:"Times New Roman",serif;font-size:14px;line-height:1.25;overflow-x:auto'},
+    h('div',{class:'small',style:'font-family:Arial,sans-serif;color:#444;margin-bottom:4px'},'How it will print (each row is one line on the 1206):'),
+    h('div',{id:'f1206rows'},previewRows()));
+  const download=async()=>{ if(!d.name.trim()) return toast('Add the nominee’s rank and name.'); const nowOver=f1206Lines(d)>F1206.lines||BULLET_CATS.some(([k])=>d.sec[k].some(x=>linesOf(x.text)>F1206.perBullet)); if(nowOver){ if(!st.okOver){ st.okOver=true; toast('This is over the CS-12 limits. Click Download again to get it anyway.'); return render(); } }
+    try{ const bytes=await build1206Pdf(d); const nm=nameParts(stripCls(d.name)); if(await savePdf(bytes,`AF 1206 - ${nm.last||'Nominee'}, ${nm.first||''} - ${d.award||'Award'}.pdf`)) saveMyDraft('f1206',`AF 1206: ${d.award||'award'} (${d.period||today()})`,d); }catch(e){ console.error(e); toast('Couldn’t build the PDF. Try again.'); } st.okOver=false; };
+  return h('div',{class:'stack'},
+    h('div',{class:'panel'},h('h3',null,'AF Form 1206: Nomination for Award'),
+      h('p',{class:'small muted',style:'margin:0 0 8px'},`CS-12 standard: three categories, narrative bullets (complete sentences in Action → Impact → Result order), ${F1206.lines} lines total including the 3 headers, and no bullet longer than ${F1206.perBullet} lines.`),
+      h('div',{class:'fgrid'},fld(d,'award','Award',{id:'f12aw',ph:'Cadet of the Quarter'}),fld(d,'category','Category (if applicable)',{id:'f12cat',ph:'C4C'}),fld(d,'period','Award period',{id:'f12per',ph:'1 Oct 26 - 31 Dec 26'}),
+        fld(d,'name','Rank/name of nominee (First MI Last)',{id:'f12nm',ph:'C4C Jane A. Doe'}),fld(d,'majcom','MAJCOM, FOA or DRU',{id:'f12mj'}),fld(d,'dafsc','DAFSC/duty title',{id:'f12ds'}),fld(d,'phone','Nominee’s telephone',{id:'f12ph',ph:'719-555-0100'}),
+        fld(d,'unit','Unit/office symbol/street address/base/state/ZIP',{id:'f12un',wide:true}),fld(d,'cc','Rank/name of unit commander / commander’s telephone',{id:'f12cc',wide:true}))),
+    bulletHelp(false),
+    meter(),
+    BULLET_CATS.map(section),
+    preview,
+    h('div',{class:'row'},h('button',{class:'btn pri',onclick:download},'Download AF 1206 (PDF)'),
+      h('button',{class:'btn',onclick:()=>copy(f1206Text(d))},'Copy bullets for the official form'),
+      h('span',{class:'small muted'},'If your package must be on the official fillable 1206, open it in Adobe and paste into Specific Accomplishments.')));
+}
+// draws the AF 1206 (20170802 edition) page with the same boxes and labels, filled in
+async function build1206Pdf(d){
+  const doc=await PDFLib.PDFDocument.create(); const page=doc.addPage([PW,PH]); const {rgb,StandardFonts}=PDFLib;
+  const T=await doc.embedFont(StandardFonts.TimesRoman), TB=await doc.embedFont(StandardFonts.TimesRomanBold), A=await doc.embedFont(StandardFonts.Helvetica), AB=await doc.embedFont(StandardFonts.HelveticaBold);
+  const mm=v=>v*72/25.4, X=v=>mm(v), Y=v=>PH-mm(v), k=rgb(0,0,0);
+  const hl=(x,y,w,t)=>page.drawLine({start:{x:X(x),y:Y(y)},end:{x:X(x+w),y:Y(y)},thickness:t||0.5,color:k});
+  const vl=(x,y,hh,t)=>page.drawLine({start:{x:X(x),y:Y(y)},end:{x:X(x),y:Y(y+hh)},thickness:t||0.5,color:k});
+  const lab=(t,x,y,size,font)=>page.drawText(t,{x:X(x)+1,y:Y(y)-(size||7)-0.5,size:size||7,font:font||A,color:k});
+  const val=(t,x,y,w)=>{ t=String(t||''); let s=12; while(s>8&&T.widthOfTextAtSize(t,s)>mm(w)-4) s-=0.5; page.drawText(t,{x:X(x)+2,y:Y(y)-mm(4.949)/2-s*0.32,size:s,font:T,color:k}); };
+  // frame and rules
+  hl(7.144,4.55,202.564,1.5); vl(209.762,4.604,266.224,1.5); vl(7.09,4.656,266.118,1.5); hl(7.0,270.986,202.692,1.5);
+  [8.278,16.576,24.268,33.22,40.944,49.184].forEach(y=>hl(7,y,202.692,0.5));
+  vl(108.744,8.36,8.202); vl(149.596,8.308,8.254); vl(123.296,16.668,7.568); vl(101.49,24.288,8.784);
+  page.drawText('NOMINATION FOR AWARD',{x:X(87.349)+mm(41.994)/2-AB.widthOfTextAtSize('NOMINATION FOR AWARD',9.1)/2,y:Y(4.55)-9.6,size:9.1,font:AB,color:k});
+  lab('AWARD',8.045,8.462); lab('CATEGORY (If Applicable)',109.83,8.462); lab('AWARD PERIOD',152.349,8.661);
+  lab('RANK/NAME OF NOMINEE (First, Middle Initial, Last)',8.045,16.746); lab('MAJCOM, FOA, OR DRU',124.46,16.746);
+  lab('DAFSC/DUTY TITLE',8.045,24.799); lab('NOMINEE\'S TELEPHONE (DSN & Commercial)',102.21,24.799);
+  lab('UNIT/OFFICE SYMBOL/STREET ADDRESS/BASE/STATE/ZIP CODE',8.045,33.398);
+  lab('RANK/NAME OF UNIT COMMANDER (First, Middle Initial, Last)/COMMANDER\'S TELEPHONE (DSN & Commercial)',8.045,41.16);
+  lab('SPECIFIC ACCOMPLISHMENTS (Use single-spaced, bullet format)',8.045,49.328);
+  lab('AF FORM 1206, 20170802',8.045,271.4,9.1,AB); lab('PREVIOUS EDITIONS ARE OBSOLETE',85.535,271.6); lab('FOR OFFICIAL USE ONLY (When filled in)',151.374,271.4,8.4);
+  // values
+  val(d.award,7.67,11.217,100.401); val(d.category,109.544,11.217,39.522); val(d.period,150.114,11.217,59.207);
+  val(d.name,7.67,19.306,115.11); val(d.majcom,123.867,19.306,85.454); val(d.dafsc,7.67,27.69,93.027); val(d.phone,101.642,27.69,107.679);
+  val(d.unit,7.67,36.009,201.381); val(d.cc,7.67,43.853,201.475);
+  // accomplishments: 12 pt Times, single-spaced, headers in bold caps
+  page.drawRectangle({x:X(7.354),y:Y(52.369+218.217),width:mm(202.321),height:mm(218.217),borderWidth:1,borderColor:k});
+  let y=Y(52.369)-3-12; const left=X(7.354)+(mm(202.321)-F1206.width)/2; const LH=13.8;
+  for(const [kk,l] of BULLET_CATS){ page.drawText(l.toUpperCase(),{x:left,y,size:12,font:TB,color:k}); y-=LH;
+    for(const x of d.sec[kk].filter(x=>(x.text||'').trim())) for(const line of wrap1206(bulletText(x.text))){ page.drawText(line,{x:left,y,size:12,font:T,color:k}); y-=LH; } }
+  return await doc.save();
 }
 </script>
 <script>
@@ -3468,11 +3702,11 @@ S.overlay=S.overlay||{}; let _trMemo=null;
 S.overlay['roster/main']=doc=>{ const set=D('config/settings'); if(!set||!(set.rename||[]).length) return doc; if(_trMemo&&_trMemo.doc===doc&&_trMemo.set===set) return _trMemo.out; const out=translateRoster(doc); _trMemo={doc,set,out}; return out; };
 function settingsView(){
   const admin=!!S.isOwner; const cur=siteSettings();
-  const st=S.edit.settings||(S.edit.settings={flights:cur.flights||flightNames().join(', '),rename:JSON.parse(JSON.stringify(cur.rename||[])),thanks:(cur.oconus||{}).thanks||'',winter:(cur.oconus||{}).winter||''});
+  const st=S.edit.settings||(S.edit.settings={flights:cur.flights||flightNames().join(', '),rename:JSON.parse(JSON.stringify(cur.rename||[])),thanks:(cur.oconus||{}).thanks||'',winter:(cur.oconus||{}).winter||'',b1206:{names:[...b1206Set().names],lines:b1206Set().lines,perBullet:b1206Set().perBullet}});
   const roster=D('roster/main')||{sections:[]};
   const checks=UMD_CHECKS.map(([l,f])=>[l,f(roster)]);
   const save=async()=>{ const rename=st.rename.filter(x=>x.from.trim()&&x.to.trim()).map(x=>({from:x.from.trim(),to:x.to.trim()}));
-    if(await mutDoc('config/settings',d=>({...d,flights:st.flights.trim(),rename,oconus:{thanks:st.thanks,winter:st.winter},updated:new Date().toISOString(),updatedBy:whoAmI()}))){ S.edit.settings=null; toast('Settings saved'); render(); } };
+    if(await mutDoc('config/settings',d=>({...d,flights:st.flights.trim(),rename,oconus:{thanks:st.thanks,winter:st.winter},b1206:{names:st.b1206.names.map(x=>String(x||'').trim()),lines:Math.max(4,Math.min(40,+st.b1206.lines||9)),perBullet:Math.max(1,Math.min(10,+st.b1206.perBullet||2))},updated:new Date().toISOString(),updatedBy:whoAmI()}))){ S.edit.settings=null; toast('Settings saved'); render(); } };
   const dis=!admin||null;
   const allNames=[...new Set([...(roster.sections||[]).map(s=>s.name),...allPeople().map(p=>p.pos).filter(Boolean)])].sort();
   return h('div',{class:'stack'},
@@ -3493,6 +3727,10 @@ function settingsView(){
       h('input',{type:'text',value:st.flights,disabled:dis,oninput:e=>st.flights=e.target.value})),
     h('div',{class:'panel'},h('h3',null,'OCONUS package deadlines'),h('p',{class:'small muted',style:'margin:0 0 8px'},'Update these each fall when the Group publishes them. Left blank, last year’s dates roll forward.'),
       h('div',{class:'fgrid'},h('label',{class:'f'},'Thanksgiving Break',h('input',{type:'date',value:st.thanks,disabled:dis,oninput:e=>st.thanks=e.target.value})),h('label',{class:'f'},'Winter Break',h('input',{type:'date',value:st.winter,disabled:dis,oninput:e=>st.winter=e.target.value})))),
+    h('div',{class:'panel'},h('h3',null,'AF 1206 bullet rules'),h('p',{class:'small muted',style:'margin:0 0 8px'},'Category headers and line limits the 1206 builder and bullet logs check against.'),
+      h('div',{class:'fgrid'},st.b1206.names.map((n,i)=>h('label',{class:'f'},'Category '+(i+1),h('input',{type:'text',value:n,disabled:dis,oninput:e=>st.b1206.names[i]=e.target.value}))),
+        h('label',{class:'f'},'Lines allowed (including headers)',h('input',{type:'number',min:4,max:40,value:st.b1206.lines,disabled:dis,oninput:e=>st.b1206.lines=e.target.value})),
+        h('label',{class:'f'},'Most lines per bullet',h('input',{type:'number',min:1,max:10,value:st.b1206.perBullet,disabled:dis,oninput:e=>st.b1206.perBullet=e.target.value})))),
     admin?h('div',{class:'row'},h('button',{class:'btn pri',onclick:save},'Save settings'),h('button',{class:'btn',onclick:()=>{ S.edit.settings=null; render(); }},'Undo changes'),cur.updated?h('span',{class:'small muted'},`Last saved by ${cur.updatedBy||'admin'} on ${fmtShort(cur.updated.slice(0,10))}`):null):null);
 }
 
@@ -3576,8 +3814,8 @@ function healthView(){
         h('p',null,h('b',null,'Who runs it'),' is decided on the access list (Admin → People & access), not by anyone’s personal account. Admins run the site, staff edit squadron records, members use it. Firebase and GitHub owners are listed in step 10 of New semester.')),
       sec('Every semester (or when command staff rotates)',ol('Admin → New semester → Start a new checklist.','Work through the 10 steps. Step 1 (backup) first, always.','Outgoing staff: update your page in Squadron Info → Continuity book before you leave the job.')),
       sec('Day to day (no code needed)',h('ul',{style:'margin:6px 0;padding-left:18px'},
-        h('li',null,'Weekly outlook: Sq Staff → Exec (paste from Excel).'),h('li',null,'SDO and CQ: Duty tab / Sq Staff → Staff Supt (paste from Excel).'),
-        h('li',null,'Roster: Roster tab (edit a row) or New semester step 2 (paste the whole UMD).'),h('li',null,'A-staff weekly pattern: Sq Staff → Chief of Staff.'),
+        h('li',null,'Weekly outlook: Sq Staff → Exec (paste from Excel).'),h('li',null,'SDO and CQ: Sq Staff → Staff Supt (paste the SDO cells; upload the CQ spreadsheet).'),
+        h('li',null,'Roster: UMD tab (edit a row) or New semester step 2 (paste the whole UMD).'),h('li',null,'A-staff weekly pattern: Sq Staff → Chief of Staff.'),
         h('li',null,'Leadership contacts and links: Squadron Info → Edit.'),h('li',null,'Who can get in: Admin → People & access.'))),
       sec('If something goes wrong',h('ul',{style:'margin:6px 0;padding-left:18px'},
         h('li',null,h('b',null,'Someone deleted or broke something: '),'Admin → Backups → Restore, tick just that area, restore.'),
@@ -3588,7 +3826,7 @@ function healthView(){
       sec('What changes over the years, and where to change it (no code)',h('ul',{style:'margin:6px 0;padding-left:18px'},
         h('li',null,'Class years and class colors roll over by themselves every June.'),
         h('li',null,'A new UMD that names jobs or sections differently: Admin → Site settings → UMD name translations.'),
-        h('li',null,'Flight names, OCONUS package deadlines: Admin → Site settings.'),
+        h('li',null,'Flight names, OCONUS package deadlines, AF 1206 categories and line limits: Admin → Site settings.'),
         h('li',null,'Leadership, phone numbers, links: Squadron Info → Edit. A4/6 rates, caps and POCs: A4/6 → Settings.'))),
       sec('Updating the site’s file, and undoing an update',
         h('p',null,'Everything the site does is in one file, index.html, on GitHub. MAINTAINING.md on GitHub walks through each of these with screenshots-level detail:'),
@@ -3609,9 +3847,12 @@ const BOOK_PROMPT='What this job does each week:\n\nKey dates and suspenses:\n\n
 function continuityView(){
   const book=S.continuity||[]; const byId=new Map(book.map(x=>[x.id,x]));
   const me=identify&&identify(); const st=S.edit.book||(S.edit.book={q:''});
-  const secs=(D('roster/main')||{sections:[]}).sections.map(s=>({name:s.name,pos:[...new Set(s.people.map(p=>(p.pos||'').trim()).filter(Boolean))]})).filter(s=>s.pos.length);
+  // not every job needs a page: airmen, supervisors and Group/Wing jobs (those have their own continuity) are left out
+  const skipPos=p=>/^(airman|airmen|supervisor|supervisors)$/i.test(p), skipSec=n=>/Group\s*\/\s*Wing/i.test(n);
+  const secs=(D('roster/main')||{sections:[]}).sections.filter(s=>!skipSec(s.name)).map(s=>({name:s.name,pos:[...new Set(s.people.map(p=>(p.pos||'').trim()).filter(p=>p&&!skipPos(p)))]})).filter(s=>s.pos.length);
   const known=new Set(secs.flatMap(s=>s.pos.map(posSlug)));
-  const orphans=book.filter(x=>!known.has(x.id)&&x.notes);
+  const gw=new Set(allPeople().filter(p=>skipSec(p.section||'')).map(p=>posSlug((p.pos||'').trim())));
+  const orphans=book.filter(x=>!known.has(x.id)&&x.notes&&!gw.has(x.id)&&!skipPos(x.pos||''));
   const q=norm(st.q);
   const item=pos=>{ const id=posSlug(pos); const x=byId.get(id); const holders=allPeople().filter(p=>(p.pos||'').trim()===pos).map(p=>p.name);
     const editing=st.edit===id; const mine=me&&(me.pos||'').trim()===pos;
