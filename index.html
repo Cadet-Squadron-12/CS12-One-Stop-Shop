@@ -1,4 +1,8 @@
 <!doctype html>
+<!--
+  CS-12 One Stop Shop. This one file is the whole site. See MAINTAINING.md and HANDOVER.md in this repository.
+  Sections are marked with /* ===== NAME ===== */ comments; search for them with Ctrl+F.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -74,6 +78,9 @@ nav.tabs button[aria-current="page"]{background:var(--sun);color:var(--navy)}
 main{padding-block:22px 60px}
 .banner{border-radius:var(--r);padding:12px 14px;margin-bottom:16px;border:1px solid var(--line);background:var(--surface);display:flex;gap:10px;align-items:flex-start}
 .banner.warn{background:var(--sun-soft);border-color:transparent}
+.banner.ok{background:var(--mint-soft);border-color:transparent}
+.panel.done{opacity:.78}
+.panel.done h3{text-decoration:line-through;text-decoration-color:var(--muted)}
 .banner.bad{background:var(--coral-soft);border-color:transparent}
 .banner.info{background:var(--sky-soft);border-color:transparent}
 .banner b{white-space:nowrap}
@@ -286,6 +293,7 @@ button.step{cursor:pointer}
 </header>
 <main class="wrap" id="main"><div class="empty">Loading the squadron's data…</div></main>
 <div id="toast" class="toast" hidden></div>
+<script>window.CS12_VERSION='2026-10-30';</script>
 <script>
 "use strict";
 /* ---------- tiny DOM helper ---------- */
@@ -332,6 +340,16 @@ function workdaysBetween(fromIso,toIso){ let d=new Date(fromIso+'T12:00'),e=new 
 function clsToYear(cls){ const n={C1C:1,C2C:2,C3C:3,C4C:4}[String(cls||'').toUpperCase().replace(/\s/g,'')]; if(!n) return ''; const d=new Date(); const firstie=d.getMonth()>=5?d.getFullYear()+1:d.getFullYear(); return String(firstie+n-1); }
 function yearOf(x){ x=String(x||'').trim(); const y=clsToYear(x); if(y) return y; const m=x.match(/(?:^|\D)(20\d\d)(?:\D|$)/); if(m) return m[1]; const s=x.match(/^[’'](\d\d)$/); return s?'20'+s[1]:''; }
 const ycls=y=>y?'y'+(+y%4):'';
+// the four current class years, firsties first; these roll over by themselves every June, so nothing needs editing each year
+const CLS_LEVELS=['C1C','C2C','C3C','C4C'];
+const classYears=()=>CLS_LEVELS.map(clsToYear);
+/* site settings an admin can change without touching code (Admin → Site settings) */
+const siteSettings=()=>D('config/settings')||{};
+function flightNames(){ const f=String(siteSettings().flights||'').split(',').map(x=>x.trim().replace(/\s+Flight$/i,'')).filter(Boolean); return f.length?f:['Alpha','Bravo','Charlie','Delta']; }
+const reEsc=s=>String(s).replace(/[.*+?^${}()|[\]\\\/]/g,'\\$&');
+const flightRe=whole=>{ const alt=flightNames().map(reEsc).join('|'); return new RegExp(whole?'^('+alt+') Flight$':'('+alt+')'); };
+const flightOf=letter=>flightNames().find(n=>n[0]===letter)||'';
+const flightOptions=()=>flightNames().map(n=>[n[0],n+' Flight']);
 function clsTag(x,label){ const y=yearOf(x); if(!y) return x?h('span',null,x):null; return h('span',{class:'ctag '+ycls(y),title:'Class of '+y},label||(/^C\dC$/i.test(String(x).trim())?String(x).toUpperCase():"’"+y.slice(2))); }
 function personYear(name){ const p=allPeople().find(x=>sameNameLoose(x.name,name)&&x.cls); return p?yearOf(p.cls):''; }
 function sameNameLoose(a,b){ a=norm(a); b=norm(b); return !!a&&!!b&&(a===b||(a.split(' ').pop()===b.split(' ').pop()&&a[0]===b[0])); }
@@ -340,9 +358,39 @@ function classLegend(){ const d=new Date(); const f=d.getMonth()>=5?d.getFullYea
 const norm=s=>(s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
 
 /* ---------- app state ---------- */
-const S={docs:{}, photos:[], dirt:[], actions:[], ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
-const DOCS=['config/site','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','week/astaff','staff/exports','a46/vault','staff/a46import'];
-const D=p=>{ const v=S.docs[p]; const o=S.overlay&&S.overlay[p]; return (v&&o)?o(v):v; };
+const S={docs:{}, loaded:{}, _c:{}, ready:false, canEdit:false, canWrite:true, db:null, user:null, downloads:null, tab:'home', sub:{}, edit:{}, pending:false};
+const DOCS=['config/site','config/meta','config/settings','roster/main','staff/contacts','staff/notes','taskers/board','sdo/schedule','cq/board','allcall/board','recall/board','signoff/form1','signoff/rooming','life/birthdays','life/pairings','grids/mitches','grids/lockers','grids/rooming','grids/coc','week/astaff','staff/exports','staff/meta','staff/turnover','a46/vault','staff/a46import'];
+/* ---------- live data, loaded only when a page needs it ----------
+   Firestore's free plan counts every record sent to every browser, so the site only listens to what the open tab
+   actually shows: a record starts streaming the first time a tab asks for it (D('roster/main'), S.signout, ...),
+   and a page that is only showing one tab never downloads the others. While a browser tab sits in the background
+   for 10+ minutes every listener is paused; it resumes (only the changes are re-sent) when the person comes back. */
+const LIVE={};
+function live(key,start){ if(LIVE[key]||!S.db) return; LIVE[key]={start,unsub:null}; if(!S.paused) LIVE[key].unsub=start(); }
+function liveStop(key){ const l=LIVE[key]; if(!l) return; try{ l.unsub&&l.unsub(); }catch(e){} delete LIVE[key]; }
+function pauseLive(){ if(S.paused) return; S.paused=true; for(const k in LIVE){ try{ LIVE[k].unsub&&LIVE[k].unsub(); }catch(e){} LIVE[k].unsub=null; } }
+function resumeLive(){ if(!S.paused) return; S.paused=false; for(const k in LIVE){ try{ LIVE[k].unsub=LIVE[k].start(); }catch(e){ console.warn(k,e); } } }
+document.addEventListener('visibilitychange',()=>{ clearTimeout(pauseLive.t); if(document.hidden) pauseLive.t=setTimeout(pauseLive,10*60e3); else resumeLive(); });
+// when the daily free allowance runs out, keep showing the saved copy and try again later instead of hammering Firestore
+function liveErr(key,e){ console.warn(key,e); if(e&&/resource-exhausted/.test(e.code||'')){ S.quota=Date.now(); const l=LIVE[key]; if(l){ l.unsub=null; setTimeout(()=>{ if(LIVE[key]===l&&!l.unsub&&!S.paused) l.unsub=l.start(); },20*60e3); } schedule(); } }
+function noteUse(k){ if(S._using) S._using.add(k); }
+function listenDoc(p){ live('d:'+p,()=>S.db.doc(p).onSnapshot(s=>{ S.docs[p]=s.exists?normDoc(p,s.data()):null; S.loaded[p]=true; schedule('d:'+p); },e=>{ S.loaded[p]=true; liveErr('d:'+p,e); })); }
+const loaded=p=>!!S.loaded[p];
+const D=p=>{ noteUse('d:'+p); if(S.db&&!LIVE['d:'+p]){ listenDoc(p); const u=S.onUse&&S.onUse[p]; if(u) u(); } const v=S.docs[p]; const o=S.overlay&&S.overlay[p]; return (v&&o)?o(v):v; };
+// lists: newest N records, or (eSSS trips) only trips that haven't been over for more than 45 days
+const daysAgoIso=n=>iso(new Date(Date.now()-n*864e5));
+const SO_WINDOW=1; // live: trips not over yet (the calendar and monthly log fetch older months once, on request)
+const COLS={
+  dirt:{path:'dirt',newest:40}, photos:{path:'photos',newest:48},
+  signout:{path:'signout',since:()=>daysAgoIso(SO_WINDOW),max:800},
+  headsup:{path:'headsup',newest:250}, mine:{path:()=>'data/users/'+S.uid,newest:150,need:()=>!!S.uid},
+  ldr:{path:'ldrtasks',newest:150,shape:'ldrtasks'}, ldrOpen:{path:'ldrtasks',eq:'open',max:300,shape:'ldrtasks'},
+  actions:{path:'actions',eq:'open',max:200},
+  discipline:{path:'discipline',newest:300,need:()=>S.canEdit}
+};
+function listenCol(k){ const c=COLS[k]; if(LIVE['c:'+k]||!S.db||(c.need&&!c.need())) return;
+  live('c:'+k,()=>S.db.collection(typeof c.path==='function'?c.path():c.path,{newest:c.newest,since:c.since&&c.since(),eq:c.eq,max:c.max}).onSnapshot(q=>{ S._c[k]=normCol(c.shape||k,q.docs.map(d=>({id:d.id,...d.data()}))); S.loaded['c:'+k]=true; schedule('c:'+k); },e=>liveErr('c:'+k,e))); }
+for(const k in COLS){ S._c[k]=[]; Object.defineProperty(S,k,{get(){ noteUse('c:'+k); listenCol(k); return S._c[k]; },set(v){ S._c[k]=v; },configurable:true}); }
 /* ---------- data shape guard ----------
    Every record is repaired to the shape the tabs expect as it loads, so a half-saved record,
    an old version's data or a typo can't crash a tab. ''/0/[]/{} stand for "a string/number/list/object of this shape";
@@ -366,6 +414,7 @@ const SHAPES={
   'grids/rooming':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'grids/coc':{title:'',maxr:0,maxc:0,cells:{__map__:''},fills:{__map__:''},merges:[[0]]},
   'week/astaff':{weekly:{__map__:['']}},
+  'config/meta':{soK:false,hs2so:false,pruned:''},'config/settings':{flights:'',rename:[{from:'',to:''}],oconus:{thanks:'',winter:''}},'staff/meta':{lastBackup:'',lastBackupBy:''},'staff/turnover':{term:'',started:'',by:'',done:{__map__:null}},
   'staff/exports':{exec:{__map__:null},shirt:{__map__:null}},
   'a46/vault':null,'staff/a46import':null
 };
@@ -397,34 +446,26 @@ function normCol(name,items){ const t=COL_SHAPES[name]; return (items||[]).filte
 
 async function boot(){
   render();
-  const claude=window.claude;
-  if(!claude||!claude.use){ S.ready=true; S.nodb=true; render(); return; }
-  const [db,user,dl,assets]=await Promise.all([claude.use('db'),claude.use('user'),claude.use('downloads'),claude.use('assets')]);
+  const api=window.cs12api; // set by the Firebase section once someone is signed in
+  if(!api||!api.use){ S.ready=true; S.nodb=true; render(); return; }
+  const [db,user,dl,assets]=await Promise.all([api.use('db'),api.use('user'),api.use('downloads'),api.use('assets')]);
   S.db=db; S.user=user; S.downloads=dl; S.assets=assets; if(user) S.uid=await user.id();
   if(user){ S.isOwner=await user.isOwner(); S.canEdit=await user.canEdit(); const w=await user.can('data.write'); S.canWrite = w===null ? true : !!w; }
   if(!db){ S.ready=true; S.nodb=true; render(); return; }
-  let first=0;
-  for(const p of DOCS){
-    db.doc(p).onSnapshot(s=>{ S.docs[p]=s.exists?normDoc(p,s.data()):null; if(++first>=DOCS.length) S.ready=true; schedule(); }, e=>console.warn(p,e));
-  }
-  // photos load the first time someone opens the Photos tab (newest 60), not on every page load
-  S.startPhotos=()=>{ if(S._photosOn) return; S._photosOn=true; db.collection('photos',{newest:60}).onSnapshot(q=>{S.photos=normCol('photos',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e)); };
-  db.collection('dirt',{newest:60}).onSnapshot(q=>{S.dirt=normCol('dirt',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  if(S.canEdit) db.collection('discipline',{newest:300}).onSnapshot(q=>{S.discipline=normCol('discipline',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  db.collection('signout',{newest:400}).onSnapshot(q=>{S.signout=normCol('signout',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  db.collection('headsup',{newest:250}).onSnapshot(q=>{S.headsup=normCol('headsup',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  if(S.uid) db.collection('data/users/'+S.uid,{newest:150}).onSnapshot(q=>{S.mine=normCol('mine',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  db.collection('ldrtasks',{newest:250}).onSnapshot(q=>{S.ldr=normCol('ldrtasks',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
-  db.collection('actions',{newest:150}).onSnapshot(q=>{S.actions=normCol('actions',q.docs.map(d=>({id:d.id,...d.data()})));schedule()},e=>console.warn(e));
+  // the pages everyone opens first; everything else streams in when a tab needs it
+  ['config/site','roster/main'].forEach(listenDoc);
+  const core=setInterval(()=>{ if(loaded('config/site')&&loaded('roster/main')){ clearInterval(core); S.ready=true; schedule(); } },60);
+  S.startPhotos=()=>listenCol('photos');
   setTimeout(()=>{S.ready=true;schedule()},4000);
 }
-function schedule(){ if(schedule.t) return; schedule.t=requestAnimationFrame(()=>{schedule.t=0; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.pending=true;return;} render();}); }
+// redraw only when something the open tab shows has changed (a CQ sign-up doesn't redraw the Roster tab)
+function schedule(key){ if(key&&S._used&&!S._used.has(key)) return; if(schedule.t) return; schedule.t=requestAnimationFrame(()=>{schedule.t=0; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.pending=true;return;} render();}); }
 document.addEventListener('focusout',()=>setTimeout(()=>{ if(S.pending){ const a=document.activeElement; if(!(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){S.pending=false;render();} }},120));
 
 /* ---------- writes ---------- */
-function dbErr(e){ console.warn(e); const c=e&&e.code; toast(c==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff if you should.':c==='quota_exceeded'?'That’s too big to save. Shorten it or split it up.':c==='offline'||!navigator.onLine?'You’re offline. Reconnect and try again.':c==='resource-exhausted'?'The site is very busy right now. Wait a minute and try again.':'That didn’t save. Check your connection and try again.'); }
+function dbErr(e){ console.warn(e); const c=e&&e.code; toast(c==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff if you should.':c==='quota_exceeded'?'That’s too big to save. Shorten it or split it up.':c==='offline'||!navigator.onLine?'You’re offline. Reconnect and try again.':c==='resource-exhausted'?'The hub used up today’s free allowance, so that didn’t save. It resets overnight (about 1 AM Mountain).':'That didn’t save. Check your connection and try again.'); }
 async function upd(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ await S.db.doc(path).update(obj); }catch(e){dbErr(e)} } // update merges (and creates the record if needed), so it never wipes other fields
-async function setDoc(path,obj){ if(!S.db) return toast('Sign in to make changes.'); try{ await S.db.doc(path).set(obj); return true }catch(e){dbErr(e); return false} }
+async function setDoc(path,obj){ if(!S.db) return toast('Sign in to make changes.'); if(DOCS.includes(path)&&!loaded(path)){ toast('Still loading. Try again in a second.'); return false; } try{ await S.db.doc(path).set(obj); return true }catch(e){dbErr(e); return false} }
 async function delDoc(path){ if(!S.db) return; try{ await S.db.doc(path).delete(); }catch(e){dbErr(e)} }
 // change a shared record based on its newest saved copy (safe when two staff edit the same list at once)
 async function mutDoc(path,fn){ if(!S.db) return toast('Sign in to make changes.'); try{ const ref=S.db.doc(path); if(ref.mutate) return await ref.mutate(cur=>fn(normDoc(path,cur||{})||{})); const s=await ref.get(); const next=await fn(normDoc(path,s.exists?s.data():{})||{}); if(next!==undefined) await ref.set(next); return true; }catch(e){ dbErr(e); return false; } }
@@ -458,8 +499,11 @@ function renderNow(){
   const m=$('#main');
   const scroll=window.scrollY;
   let body;
+  S._using=new Set(['d:config/site','d:roster/main']);
   try{ body=(VIEWS[S.tab]||VIEWS.home)(); }catch(e){ console.error(e); body=h('div',{class:'banner bad'},h('b',null,'Something broke on this tab. '),String(e.message||e)); }
+  S._used=S._using; S._using=null;
   const top=[];
+  if(S.quota) top.push(h('div',{class:'banner warn'},h('b',null,'The squadron hub has used today’s free allowance. '),'You’re seeing the last saved copy, and changes may not save until it resets overnight (about 1 AM Mountain). Nothing is lost.'));
   if(S.nodb) top.push(h('div',{class:'banner info'},h('b',null,'Sign in to see squadron data. '),'This page keeps its records in a shared database that loads once you’re signed in.'));
   else if(!S.ready) top.push(h('div',{class:'banner info'},'Loading…'));
   m.replaceChildren(...top, body);
@@ -547,8 +591,8 @@ function cqTonight(){
 
 /* ================= TASKERS ================= */
 // class year for a tasker row: roster first, then cadet rank
-function tkClassOf(p){ const r=allPeople().find(x=>sameName(x.name,p.name)); const c=r&&({C1C:'2027',C2C:'2028',C3C:'2029',C4C:'2030'})[r.cls]; if(c) return c; const rk=(p.rank||'').replace('C/','');
-  if(/^(Amn|AB|A1C)$/i.test(rk)) return '2030'; if(/^(SrA|SSgt)$/i.test(rk)) return '2029'; if(/^(TSgt|MSgt|SMSgt|CMSgt)$/i.test(rk)) return '2028'; if(/^(2Lt|1Lt|Capt|Maj|Lt Col|Col)$/i.test(rk)) return '2027'; return ''; }
+function tkClassOf(p){ const r=allPeople().find(x=>sameName(x.name,p.name)); const c=r&&clsToYear(r.cls); if(c) return c; const rk=(p.rank||'').replace('C/','');
+  if(/^(Amn|AB|A1C)$/i.test(rk)) return clsToYear('C4C'); if(/^(SrA|SSgt)$/i.test(rk)) return clsToYear('C3C'); if(/^(TSgt|MSgt|SMSgt|CMSgt)$/i.test(rk)) return clsToYear('C2C'); if(/^(2Lt|1Lt|Capt|Maj|Lt Col|Col)$/i.test(rk)) return clsToYear('C1C'); return ''; }
 // due date: stored on the column, or read from labels like "AFPAAS (due 28 Sept)"
 function tkDue(c){ if(c.due) return c.due; const m=(c.label||'').match(/due\s+(\d{1,2})\s*([A-Za-z]{3,})/i); if(!m) return ''; const mi=MON3.findIndex(x=>m[2].toLowerCase().startsWith(x.toLowerCase())); if(mi<0) return ''; const now=new Date(); let y=now.getFullYear(); if(now.getMonth()>=7&&mi<5) y++; if(now.getMonth()<5&&mi>=7) y--; return y+'-'+pad(mi+1)+'-'+pad(+m[1]); }
 const TK_CYCLE=['Yes','No',''];
@@ -572,7 +616,7 @@ VIEWS.taskers=function(){
     rows.push(h('tr',{class:'grp'},h('td',{colspan:tk.columns.length+2},g.name)));
     ppl.forEach(p=>rows.push(h('tr',{class:ycls(tkClassOf(p))||null},h('td',{class:'muted small',style:'white-space:nowrap'},p.rank),h('td',{style:'white-space:nowrap;font-weight:600'},p.name),tk.columns.map(c=>cell(p,c)))));
   });
-  const nc=S.edit.newCol||(S.edit.newCol={label:'',due:'',classes:['2027','2028','2029','2030']});
+  const nc=S.edit.newCol||(S.edit.newCol={label:'',due:'',classes:classYears()});
   return h('div',{class:'stack'},
     h('h3',null,'Squadron taskers'),h('p',{class:'small muted',style:'margin-top:-6px'},'Click a cell to cycle Yes → No → blank. Blank means it doesn’t apply to that cadet. Cadets can also mark their own taskers done on My Squadron.'),
     h('div',{class:'kpis'},tk.columns.map((c,i)=>h('div',{class:'kpi'},h('div',{class:'l'},c.label),h('div',{class:'v'},`${counts[i].y}/${counts[i].y+counts[i].n}`),h('div',{class:'bar'},h('i',{style:`width:${counts[i].y+counts[i].n?100*counts[i].y/(counts[i].y+counts[i].n):0}%`}))))),
@@ -583,7 +627,7 @@ VIEWS.taskers=function(){
       h('div',{class:'fgrid'},
         h('label',{class:'f wide'},'Tasker',h('input',{type:'text',id:'newcol',placeholder:'e.g. AFPAAS',value:nc.label,oninput:e=>nc.label=e.target.value})),
         h('label',{class:'f'},'Due',h('input',{type:'date',id:'newcoldue',value:nc.due||'',oninput:e=>nc.due=e.target.value})),
-        h('div',{class:'f'},'Classes',h('div',{class:'row'},['2027','2028','2029','2030'].map(y=>h('label',{class:'ck'},h('input',{type:'checkbox',checked:(nc.classes||(nc.classes=['2027','2028','2029','2030'])).includes(y),onchange:e=>{ nc.classes=e.target.checked?[...new Set([...nc.classes,y])]:nc.classes.filter(x=>x!==y); }}),"’"+y.slice(2)))))),
+        h('div',{class:'f'},'Classes',h('div',{class:'row'},classYears().map(y=>h('label',{class:'ck'},h('input',{type:'checkbox',checked:(nc.classes||(nc.classes=classYears())).includes(y),onchange:e=>{ nc.classes=e.target.checked?[...new Set([...nc.classes,y])]:nc.classes.filter(x=>x!==y); }}),"’"+y.slice(2)))))),
       h('button',{class:'btn pri',style:'margin-top:10px',onclick:()=>{ if(!nc.label.trim()) return toast('Name the tasker first.'); if(!nc.classes.length) return toast('Pick at least one class.');
           const id='t'+uid(); const st={}; let n=0,unk=0; tk.groups.forEach(g=>g.people.forEach(p=>{ const y=tkClassOf(p); if(!y){unk++;return;} if(nc.classes.includes(y)){ st[p.id]={[id]:'No'}; n++; } }));
           const col={id,label:nc.label.trim().slice(0,120),due:nc.due||'',classes:[...nc.classes].sort(),by:myName()||'',created:today()};
@@ -687,14 +731,14 @@ function cqView(){
   return h('div',{class:'stack'},
     h('div',{class:'row'},h('div',{class:'seg'},months.map(mm=>h('button',{type:'button','aria-pressed':String(mm===mon),onclick:()=>{S.sub.cqMonth=mm;render()}},mm))),h('span',{class:'spacer'}),
       canW?h('label',{class:'f',style:'flex-direction:row;align-items:center;gap:6px'},'Fill as',h('input',{type:'text',id:'cqme',list:'cqnames',style:'width:200px',value:meName,placeholder:'Your name',onchange:e=>{S.sub.cqMe=e.target.value;ls('sub',S.sub)}})):null),
-    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--y0-soft);box-shadow:inset 3px 0 0 var(--y0)'}),'Class of ’28 slots'),h('span',null,h('i',{style:'background:var(--y1-soft);box-shadow:inset 3px 0 0 var(--y1)'}),'Class of ’29 slots'),h('span',null,h('i',{style:'background:var(--coral-soft)'}),'Do not fill'),canW?h('span',{class:'muted'},'Click an open slot and type your first and last name.'):null),
+    h('div',{class:'legend'},h('span',null,h('i',{style:'background:var(--y0-soft);box-shadow:inset 3px 0 0 var(--y0)'}),'Class of ’'+clsToYear('C2C').slice(2)+' slots'),h('span',null,h('i',{style:'background:var(--y1-soft);box-shadow:inset 3px 0 0 var(--y1)'}),'Class of ’'+clsToYear('C3C').slice(2)+' slots'),h('span',null,h('i',{style:'background:var(--coral-soft)'}),'Do not fill'),canW?h('span',{class:'muted'},'Click an open slot and type your first and last name.'):null),
     h('datalist',{id:'cqnames'},[...q.c28,...q.c29].map(p=>h('option',{value:p.name}))),
     weeks.map(w=>h('div',{class:'cqwk tw'},h('div',{class:'cqgrid'},
       h('div',{class:'h'},w.label),w.days.slice(0,4).map(d=>h('div',{class:'h'},d)),h('div',{class:'h'},w.weLabel),w.days.slice(4).map(d=>h('div',{class:'h'},d)),
       w.rows.map(r=>[h('div',{class:'tm'},r.wd),r.slots.slice(0,4).map(slotEl),h('div',{class:'tm'},r.we),r.slots.slice(4).map(slotEl)])
     ))),
     h('h3',null,'CQ count tracker'),
-    h('div',{class:'grid2'},tracker(q.c28,'Class of 2028'),tracker(q.c29,'Class of 2029'))
+    h('div',{class:'grid2'},tracker(q.c28,'Class of '+clsToYear('C2C')),tracker(q.c29,'Class of '+clsToYear('C3C')))
   );
 }
 function saveCq(id,v){ if(S.edit.cqSlot!==id) return; S.edit.cqSlot=null; const cur=(D('cq/board').fill||{})[id]||''; v=(v||'').trim().slice(0,60); if(v!==cur){ if(typeof cqWrite==='function') cqWrite(id,v); else upd('cq/board',{fill:{[id]:v}}); } render(); }
@@ -726,7 +770,7 @@ VIEWS.roster=function(){
   let body;
   if(cur==='umd') body=umdView();
   else if(cur==='coc') body=gridView('grids/coc');
-  else { const p=D('life/pairings'); body=p? h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Supervisor (’29)'),h('th',null,'Flight'),h('th',null,'Supervisee(s) (’30)'))),h('tbody',null,p.rows.map(r=>h('tr',null,h('td',{style:'font-weight:600'},r.sup),h('td',null,r.flight),h('td',null,r.sees.join(' · '))))))) : emptyState('No pairings yet.'); }
+  else { const p=D('life/pairings'); body=p? h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Supervisor (’'+clsToYear('C3C').slice(2)+')'),h('th',null,'Flight'),h('th',null,'Supervisee(s) (’'+clsToYear('C4C').slice(2)+')'))),h('tbody',null,p.rows.map(r=>h('tr',null,h('td',{style:'font-weight:600'},r.sup),h('td',null,r.flight),h('td',null,r.sees.join(' · '))))))) : emptyState('No pairings yet.'); }
   return h('div',{class:'stack'},head('Roster','Unit manning, chain of command and supervisor pairings.',segEl),h('div',{class:'row small muted'},'Class colors:',classLegend()),body);
 };
 function umdView(){
@@ -899,7 +943,8 @@ function canEditSel(){ return !!S.isOwner||(S.canEdit&&isSel()); }
 function selGrid(path){ const can=canEditSel();
   return h('div',{class:'stack'},h('div',{class:'banner info small'},h('b',null,'Kept current by the SEL. '),can?'You can edit this: click Edit cells, then click any cell.':'See something wrong? Let the SEL know.'),gridView(path,can)); }
 VIEWS.links=function(){
-  const [cur,segEl]=seg('info',[['info','Contacts & links'],['mitch','Mitch’s seating'],['locker','Storage lockers'],['rooming','Rooming']],'info');
+  const [cur,segEl]=seg('info',[['info','Contacts & links'],['mitch','Mitch’s seating'],['locker','Storage lockers'],['rooming','Rooming'],['book','Continuity book']],'info');
+  if(cur==='book') return h('div',{class:'stack'},head('Squadron Info','One page per job, written by the people who held it.',segEl),continuityView());
   if(cur!=='info') return h('div',{class:'stack'},head('Squadron Info','Contacts, links, seating, lockers and rooms.',segEl),
     cur==='mitch'?h('div',{class:'stack'},h('div',{class:'banner info small'},h('b',null,'Anyone in the squadron can update this. '),'Click Edit cells, then click a seat to change it.'),gridView('grids/mitches',!!S.db&&!S.nodb)):
     selGrid({locker:'grids/lockers',rooming:'grids/rooming'}[cur]));
@@ -924,7 +969,7 @@ VIEWS._info=function(segEl){
         h('li',null,'Reviewers: check the address, emergency contact, Form 99 and grammar. If anything is missing, send it back with notes instead of signing.')),
         h('button',{class:'btn sun',style:'margin-top:10px',onclick:()=>{S.sub.doc='esss';go('builder')}},'Build an eSSS')),
       h('div',{class:'panel'},h('h3',null,'Chain of command for eSSS routing'),h('table',{class:'t small'},h('tbody',null,
-        [['2030','Supervisor → Flight Chief → Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],['2029','Flight Chief → Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],['2028','Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],['2027','Sq Exec → C/Sq CC → CS12 CC']].map(([y,c])=>h('tr',null,h('td',{style:'font-weight:700'},y),h('td',null,c))))))
+        [[clsToYear('C4C'),'Supervisor → Flight Chief → Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],[clsToYear('C3C'),'Flight Chief → Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],[clsToYear('C2C'),'Flight Commander → Sq Exec → C/Sq CC → CS12 CC'],[clsToYear('C1C'),'Sq Exec → C/Sq CC → CS12 CC']].map(([y,c])=>h('tr',null,h('td',{style:'font-weight:700'},y),h('td',null,c))))))
     )
   );
 };
@@ -1148,8 +1193,8 @@ function rosterPick(obj,key,label,onPick,opts={}){
   if(opts.me&&!obj[key]&&typeof identify==='function'){ const p=identify(); if(p){ obj[key]=lastFirst(p.name); if(onPick) onPick(p); bsave(); } }
   return fld(obj,key,label,{hint:NAME_HINT,...opts,list:'bnames',live:true,onchange:e=>{ const v=flOf(e.target.value); const p=allPeople().find(x=>norm(x.name)===norm(v)); if(p&&onPick){ const keep=obj[key]; onPick(p); if(!/,/.test(String(obj[key]||''))) obj[key]=lastFirst(keep||p.name); bsave(); render(); } }});
 }
-const classOf=p=>({C1C:'2027',C2C:'2028',C3C:'2029',C4C:'2030'})[p.cls]||'';
-const flightLetter=p=>((p.section||'')+' '+(p.flight||'')).match(/Alpha|Bravo|Charlie|Delta/)?.[0]?.[0]||'X';
+const classOf=p=>clsToYear(p.cls)||'';
+const flightLetter=p=>((p.section||'')+' '+(p.flight||'')).match(flightRe())?.[0]?.[0]||'X';
 /* Names: paperwork prints Last, First MI. The name pickers fill that format, and anything typed in either order
    ("Sophie M Kent" or "Kent, Sophie M") is understood. */
 function nameParts(n){ n=String(n||'').trim().replace(/\s+/g,' '); if(!n) return {first:'',last:'',mi:''};
@@ -1171,10 +1216,10 @@ function findPos(re,flight){ return allPeople().find(p=>re.test(p.pos)&&(!flight
 function withCls(p){ return p?`${p.cls||''} ${p.name}`.trim():''; }
 
 /* ---------- eSSS ---------- */
-function esssDefaults(){ return {cadet:'',cls:'C4C',year:'2030',flight:'A',phone:'',reason:'',city:'',state:'',address:'',depart:'',departTime:'',ret:'',retTime:'before TAPS',lodging:'',ecName:'',ecRel:'',ecPhone:'',missing:'',good:true,subject:'',summary:'',summaryEdited:false,symbol:'AFCW/CS12',created:today(),routing:[],attach99:false,track:true}; }
+function esssDefaults(){ return {cadet:'',cls:'C4C',year:clsToYear('C4C'),flight:'A',phone:'',reason:'',city:'',state:'',address:'',depart:'',departTime:'',ret:'',retTime:'before TAPS',lodging:'',ecName:'',ecRel:'',ecPhone:'',missing:'',good:true,subject:'',summary:'',summaryEdited:false,symbol:'AFCW/CS12',created:today(),routing:[],attach99:false,track:true}; }
 function routingFor(e){
   const cad=allPeople().find(p=>norm(p.name)===norm(flOf(e.cadet)));
-  const fl={A:'Alpha',B:'Bravo',C:'Charlie',D:'Delta'}[e.flight]||'Alpha';
+  const fl=flightOf(e.flight)||flightNames()[0];
   const sup=(()=>{ const pr=D('life/pairings'); if(!pr||!cad) return ''; const lf=norm(lastFirst(cad.name)); const row=pr.rows.find(r=>r.sees.some(s=>norm(s.replace(/\s*\(f\)/,''))===lf)); if(!row) return ''; const nm=row.sup.replace(/\s*\(f\)/,'').split(',').map(s=>s.trim()); const full=nm[1]+' '+nm[0]; const p=allPeople().find(x=>norm(x.name)===norm(full)); return p?withCls(p):'C3C '+full; })();
   const chf=withCls(findPos(/^Flight Chief/,fl)), cmdr=withCls(findPos(/^Flight Commander/,fl));
   const exec=withCls(findPos(/^Squadron Executive/)), cc=withCls(findPos(/^Squadron Commander/));
@@ -1183,10 +1228,10 @@ function routingFor(e){
   const DIV={A1:[/A1 Division Chief/,'A1'],A2:[/A2 Division Chief/,'A2'],A3:[/A3 Division Chief/,'A3'],A46:[/A4\/A6 Division Chief/,'A4/6'],SE:[/Standardization\/Evaluation Officer/,'STAN/EVAL']}[e.flight];
   const isSelf=n=>cad&&n&&norm(n.replace(/^C[1-4]C\s+/,''))===norm(cad.name);
   const chain=(e.flight==='SQ'||e.flight==='GW')? [['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]].filter(([,n])=>!isSelf(n)) : DIV? (()=>{ const chief=findPos(DIV[0]); const self=chief&&cad&&norm(chief.name)===norm(cad.name); return [...(self?[]:[['CS12/'+DIV[1]+'\nDIV CHF',withCls(chief)]]),['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]]; })() : {
-    '2030':[['CS12/'+L+'\nSUPVR',sup],['CS12/'+L+'\nFLT CHF',chf],['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
-    '2029':[['CS12/'+L+'\nFLT CHF',chf],['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
-    '2028':[['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
-    '2027':[['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]]}[e.year]||[];
+    [clsToYear('C4C')]:[['CS12/'+L+'\nSUPVR',sup],['CS12/'+L+'\nFLT CHF',chf],['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
+    [clsToYear('C3C')]:[['CS12/'+L+'\nFLT CHF',chf],['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
+    [clsToYear('C2C')]:[['CS12/'+L+'\nFLT CMDR',cmdr],['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]],
+    [clsToYear('C1C')]:[['CS12/\nSQ/CCE',exec],['CS12/C\nSQ/CC',cc]]}[e.year]||[];
   const rows=[...Array(10)].map(()=>({to:'',action:'',name:''}));
   chain.forEach(([to,name],i)=>rows[i]={to,action:'Coord',name});
   rows[5]={to:'CS12\nCC',action:'Approve',name:amt};
@@ -1215,7 +1260,7 @@ function esssChainPanel(e){
   if(!e.cadet) return h('div',{class:'panel',style:'background:var(--sky-soft);border-color:transparent'},h('h3',null,'Your approval chain'),h('p',{class:'small muted',style:'margin:0'},'Pick your name above and your chain of command fills in from the roster.'));
   if(!cad) return h('div',{class:'banner warn'},h('b',null,'Not on the roster. '),'Pick your name from the list so the chain can fill in, or type each person in Routing below.');
   const sug=routingFor(e).filter(r=>r.name||r.to); const div={A1:'A1 division',A2:'A2 division',A3:'A3 division',A46:'A4/6 division',SE:'Stan/Eval division',SQ:'Squadron Staff',GW:'Group/Wing Staff'}[e.flight];
-  const fl={A:'Alpha',B:'Bravo',C:'Charlie'}[e.flight];
+  const fl=flightOf(e.flight)||undefined;
   const same=JSON.stringify(sug)===JSON.stringify(e.routing.filter(r=>r.name||r.to));
   return h('div',{class:'panel',style:'background:var(--sky-soft);border-color:transparent'},
     h('div',{class:'row'},h('h3',{style:'margin:0'},'Suggested approval chain'),h('span',{class:'spacer'}),same?h('span',{class:'chip Approved'},'In use below'):h('button',{class:'btn sm pri',onclick:()=>{e.routing=routingFor(e);bsave();render()}},'Use this chain')),
@@ -1239,8 +1284,8 @@ function builderEsss(){
       h('div',{class:'fgrid'},
         rosterPick(e,'cadet','Your name',p=>{ e.cls=p.cls||e.cls; e.year=classOf(p)||e.year; e.flight=routeCodeOf(p.name)||flightLetter(p); const c=contactFor(p.name); if(c&&c.phone) e.phone=c.phone; e.routing=routingFor(e); },{ph:'Start typing your name',me:true}),
         fld(e,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C']}),
-        fld(e,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute}),
-        fld(e,'flight','Flight or A-staff division',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1 (Personnel)'],['A2','A2 (Intel)'],['A3','A3 (Operations)'],['A46','A4/6 (Support & Comms)'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,hint:'A-staff routes through your Division Chief. Squadron and Group/Wing Staff go straight to the Sq Exec.'}),
+        fld(e,'year','Class year (sets routing)',{type:'select',options:classYears(),onchange:reRoute}),
+        fld(e,'flight','Flight or A-staff division',{type:'select',options:[...flightOptions(),['A1','A1 (Personnel)'],['A2','A2 (Intel)'],['A3','A3 (Operations)'],['A46','A4/6 (Support & Comms)'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,hint:'A-staff routes through your Division Chief. Squadron and Group/Wing Staff go straight to the Sq Exec.'}),
         fld(e,'phone','Your cell',{type:'tel',live:true}),
         fld(e,'depart','Depart (suspense date)',{type:'date',live:true}), fld(e,'departTime','Depart time',{ph:'1100',live:true}),
         fld(e,'ret','Return date',{type:'date',live:true}), fld(e,'retTime','Return time',{ph:'before TAPS',live:true}))),
@@ -1453,10 +1498,13 @@ VIEWS.builder=function(){
 </script>
 <script>
 /* ================= OCONUS TRAVEL PACKAGE ================= */
-const OC_DEADLINES={thanks:['Thanksgiving Break','2026-11-03'],winter:['Winter Break','2026-11-23'],other:['Other leave','']};
+// OCONUS package deadlines: set each year in Admin → Site settings. Until someone does, the usual dates roll forward to the next year.
+const nextOn=md=>{ const t=today(); const y=+t.slice(0,4); return (y+'-'+md)>=t?(y+'-'+md):((y+1)+'-'+md); };
+const OC_DEADLINES={ get thanks(){ const s=(D('config/settings')||{}).oconus||{}; return ['Thanksgiving Break',s.thanks||nextOn('11-03')]; },
+  get winter(){ const s=(D('config/settings')||{}).oconus||{}; return ['Winter Break',s.winter||nextOn('11-23')]; }, other:['Other leave',''] };
 const OC_FILES={advisory:[],apacs:[]}; // uploaded screenshots live in memory only
 const OC_ORDER=['eSSS','Form 99','Itinerary','Travel advisories','Foreign Clearance Guide','APACS confirmation','Force Protection & Emergency Plan'];
-function ocDefaults(){ return {cadet:'',cls:'C4C',year:'2030',flight:'A',phone:'',homePhone:'',email:'',workPhone:'',brk:'winter',depart:'',ret:'',travelers:'1',companions:'',purpose:'leave',poc:'',background:'',ecName:'',ecRel:'',ecPhone:'',missing:'',
+function ocDefaults(){ return {cadet:'',cls:'C4C',year:clsToYear('C4C'),flight:'A',phone:'',homePhone:'',email:'',workPhone:'',brk:'winter',depart:'',ret:'',travelers:'1',companions:'',purpose:'leave',poc:'',background:'',ecName:'',ecRel:'',ecPhone:'',missing:'',
   countries:[{name:'',arrive:'',depart:'',level:'1',hotel:'',hotelPhone:'',embPhone:'',embAddr:'',step:'yes',apacs:'no',fcg1:'',fcg4:''}],
   legs:[{when:'',from:'',to:'',mode:'Flight',carrier:'',num:'',notes:'',out:true,home:false}],
   summary:'',summaryEdited:false,subject:'',subjectEdited:false,routing:[],created:today()}; }
@@ -1618,8 +1666,8 @@ VIEWS.oconus=function(embedded){
       h('div',{class:'fgrid'},
         rosterPick(o,'cadet','Your name',p=>{ o.cls=p.cls||o.cls; o.year=classOf(p)||o.year; o.flight=routeCodeOf(p.name)||flightLetter(p); const c=contactFor(p.name); if(c){ if(c.phone) o.phone=c.phone; if(c.email) o.email=c.email; } o.routing=ocRouting(o); },{me:true}),
         fld(o,'cls','Class',{type:'select',options:['C1C','C2C','C3C','C4C'],id:'occls'}),
-        fld(o,'year','Class year (sets routing)',{type:'select',options:['2027','2028','2029','2030'],onchange:reRoute,id:'ocyr'}),
-        fld(o,'flight','Flight, division or staff',{type:'select',options:[['A','Alpha Flight'],['B','Bravo Flight'],['C','Charlie Flight'],['A1','A1'],['A2','A2'],['A3','A3'],['A46','A4/6'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,id:'ocfl'}),
+        fld(o,'year','Class year (sets routing)',{type:'select',options:classYears(),onchange:reRoute,id:'ocyr'}),
+        fld(o,'flight','Flight, division or staff',{type:'select',options:[...flightOptions(),['A1','A1'],['A2','A2'],['A3','A3'],['A46','A4/6'],['SE','Stan/Eval'],['SQ','Squadron Staff'],['GW','Group/Wing Staff']],onchange:reRoute,id:'ocfl'}),
         fld(o,'brk','Break',{type:'select',options:[['thanks','Thanksgiving Break'],['winter','Winter Break'],['other','Other']],id:'ocbrk'}),
         fld(o,'depart','Leave USAFA',{type:'date',id:'ocdep',live:true}),fld(o,'ret','Return to USAFA',{type:'date',id:'ocret',live:true}),
         fld(o,'phone','Your cell',{id:'ocph',live:true}),fld(o,'homePhone','Home phone',{id:'ochp'}),fld(o,'email','Email you’ll check while OCONUS',{id:'ocem',live:true}),fld(o,'workPhone','Work section phone',{id:'ocwp'}),
@@ -1749,9 +1797,9 @@ VIEWS.me=function(){
   if(S.nodb||!S.uid) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),emptyState('Sign in to see your personal page.'));
   const name=myName(); const st=S.edit.me||(S.edit.me={pick:'',todo:'',due:''});
   if(!name&&!S.canEdit) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),
-    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'We couldn’t find you on the roster'),h('p',{class:'muted'},'You’re signed in as ',h('b',null,(typeof FB!=='undefined'&&FB.user&&FB.user.email)||''),'. Ask squadron staff to type your roster name next to your email on the Access tab, then refresh.')));
+    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'We couldn’t find you on the roster'),h('p',{class:'muted'},'You’re signed in as ',h('b',null,(typeof FB!=='undefined'&&FB.user&&FB.user.email)||''),'. Ask squadron staff to type your roster name next to your email on the access list (Admin tab), then refresh.')));
   if(!name) return h('div',{class:'stack'},head('My Squadron','Your paperwork, to-dos and duty schedule in one place.'),
-    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Who are you?'),h('p',{class:'muted'},'Staff: your email didn’t match the roster. Pick your name once (or set it on the Access tab). This page then shows paperwork headed your way, your to-dos, taskers and duty days. Only you can see your to-dos.'),
+    h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('h2',{class:'pg'},'Who are you?'),h('p',{class:'muted'},'Staff: your email didn’t match the roster. Pick your name once (or set it on the access list (Admin tab)). This page then shows paperwork headed your way, your to-dos, taskers and duty days. Only you can see your to-dos.'),
       h('div',{class:'stack',style:'gap:10px;text-align:left'},h('label',{class:'f'},'Your name',h('input',{type:'text',id:'mepick',list:'menames',value:st.pick,oninput:e=>st.pick=e.target.value}),nameDatalist('menames')),
         h('button',{class:'btn pri',onclick:async()=>{ const p=allPeople().find(x=>norm(x.name)===norm(st.pick)); if(!p) return toast('Pick your name from the list.'); try{ await S.db.doc(`data/users/${S.uid}/profile`).set({name:p.name}); }catch(e){ toast(e&&e.code==='invalid_argument'?'Your access level can’t save a personal page. Ask the Chief of Staff for Contributor or Editor access.':'That didn’t save. Try again.'); } }},'This is me'))));
   const me=(typeof identify==='function'&&identify())||allPeople().filter(p=>norm(p.name)===norm(name)).sort((a,b)=>!!(b.pos||'').trim()-!!(a.pos||'').trim())[0]||{name,rank:'',pos:''};
@@ -1759,12 +1807,12 @@ VIEWS.me=function(){
   const myOut=signouts().filter(x=>sameName(x.name,name)&&x.ret>=t);
   const todos=(S.mine||[]).filter(d=>d.id.startsWith('todo_')).sort((a,b)=>(a.done-b.done)||(a.due||'9').localeCompare(b.due||'9'));
   const acts=(S.actions||[]).filter(a=>!a.done&&sameName(a.owner,name));
-  const ldr=(S.ldr||[]).filter(x=>x.status!=='Done'&&sameName(x.assignee,name)).sort((a,b)=>(a.due||'9').localeCompare(b.due||'9'));
+  const ldr=(S.ldrOpen||[]).filter(x=>x.status!=='Done'&&sameName(x.assignee,name)).sort((a,b)=>(a.due||'9').localeCompare(b.due||'9'));
   const tkAll=(myTaskerList(name)||[]).sort((a,b)=>a.done-b.done||(tkDue(a.c)||'9').localeCompare(tkDue(b.c)||'9')); const tk=tkAll.filter(x=>!x.done); const cq=myCq(name).filter(x=>x.date>=t); const sdo=mySdo(name).filter(d=>d>=t);
   const meCol=`data/users/${S.uid}`;
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
-    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the Access tab.'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
+    head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the access list (Admin tab).'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
     h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—'))),
     myWeekPanel(name),
     h('div',{class:'grid2'},
@@ -1820,7 +1868,7 @@ function leaderTargets(kinds){
   const out=[]; const ppl=allPeople();
   if(kinds.includes('staff')){ const r=D('roster/main'); const sec=r&&r.sections.find(x=>/Command Staff/.test(x.name)); (sec?sec.people:[]).filter(p=>!/^Squadron Commander$/.test((p.pos||'').trim())).forEach(p=>out.push({key:'stf:'+p.pos,label:(p.pos||'').replace(/^Squadron /,''),name:p.name,rank:p.rank,kind:'staff'})); }
   if(kinds.includes('div')){ [['A1',/Squadron A1 Division Chief/],['A2',/Squadron A2 Division Chief/],['A3',/Squadron A3 Division Chief/],['A4/6',/Squadron A4\/A6 Division Chief/],['Stan/Eval',/Standardization\/Evaluation Officer/]].forEach(([l,re])=>{ const p=ppl.find(x=>re.test(x.pos||'')); if(p) out.push({key:'div:'+l,label:l==='Stan/Eval'?'Stan/Eval Officer':l+' Division Chief',name:p.name,rank:p.rank,kind:'div'}); }); }
-  if(kinds.includes('flight')){ ['Alpha','Bravo','Charlie'].forEach(f=>{ const p=ppl.find(x=>/^Flight Commander$/.test((x.pos||'').trim())&&(x.section||'').startsWith(f)); if(p) out.push({key:'flt:'+f,label:f+' Flight Commander',name:p.name,rank:p.rank,kind:'flight'}); }); }
+  if(kinds.includes('flight')){ flightNames().forEach(f=>{ const p=ppl.find(x=>/^Flight Commander$/.test((x.pos||'').trim())&&(x.section||'').startsWith(f)); if(p) out.push({key:'flt:'+f,label:f+' Flight Commander',name:p.name,rank:p.rank,kind:'flight'}); }); }
   return out;
 }
 function leaderTaskPanel(kinds,byRole){
@@ -1869,7 +1917,7 @@ function sqExec(){
   const site=D('config/site'); const up=site&&site.outlook&&site.outlook.updated; const age=up?ageDays(up):null;
   return h('div',{class:'stack'},
     signoutCalendar(),
-    monthlyLogPanel({kind:'exec',title:'eSSS tracker',items:signouts(),monthOf:x=>(x.depart||'').slice(0,7),
+    monthlyLogPanel({kind:'exec',title:'eSSS tracker',items:signouts(),ensure:loadSignoutMonth,monthOf:x=>(x.depart||'').slice(0,7),
       header:['Name','Chain','Type','Leaving','Time','Back','Time','Where','Logged'],
       row:x=>[x.name,x.unit||unitOf(x.name).label,x.kind,x.depart,x.departTime||'',x.ret,x.retTime||'',x.where||'',(x.created||'').slice(0,10)]}),
     h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Weekly schedule for the Dozen Daily'),h('span',{class:'spacer'}),h('span',{class:'chip '+(age==null||age>6?'Returned':'Approved')},age==null?'Not updated on the site yet':age===0?'Updated today':`Updated ${age}d ago`)),
@@ -2202,7 +2250,7 @@ function suptPastePanel(){
 // counts for people who aren't in any section that has a chain.
 function unitOf(name){
   const ents=allPeople().filter(p=>sameName(p.name,name)); if(!ents.length) return {kind:'',key:'',label:''};
-  const fl=ents.find(p=>/^(Alpha|Bravo|Charlie|Delta) Flight$/.test(p.section||''));
+  const fl=ents.find(p=>flightRe(true).test(p.section||''));
   if(fl){ const k=fl.section.split(' ')[0]; return {kind:'flight',key:k,label:k+' Flight'}; }
   for(const p of ents){ const pos=(p.pos||'').trim(), sec=p.section||'';
     if(/Command Staff/.test(sec)) return {kind:'cmd',key:'SQ',label:'Squadron Staff'};
@@ -2212,7 +2260,7 @@ function unitOf(name){
     if(/Special Staff/.test(sec)) return {kind:'special',key:'SQ',label:'Squadron Special Staff'};
     if(/Group\/Wing/.test(sec)) return {kind:'gw',key:'GW',label:'Group/Wing Staff'};
   }
-  const f=((ents[0].flight||'')+' ').match(/Alpha|Bravo|Charlie|Delta/); if(f) return {kind:'flight',key:f[0],label:f[0]+' Flight'};
+  const f=((ents[0].flight||'')+' ').match(flightRe()); if(f) return {kind:'flight',key:f[0],label:f[0]+' Flight'};
   return {kind:'',key:'',label:''};
 }
 // what the roster shows: the person's chain, plus their staff job when they also hold a flight job
@@ -2225,11 +2273,17 @@ function routeCodeOf(name){ const u=unitOf(name); return u.kind==='flight'?u.key
 
 const SO_KINDS=['eSSS','OCONUS'];
 // read "11/20–11/23 Austin, Texas" from older paperwork notices
-function legacyTrips(){ return (S.headsup||[]).filter(x=>/eSSS|OCONUS/.test(x.kind)&&/^\d{4}-\d{2}-\d{2}$/.test(x.suspense||'')).map(x=>{
+function legacyTrips(){ const m=D('config/meta'); if(!m||m.hs2so) return []; return legacyTripsFrom(S.headsup||[]); }
+function legacyTripsFrom(list){ return list.filter(x=>/eSSS|OCONUS/.test(x.kind)&&/^\d{4}-\d{2}-\d{2}$/.test(x.suspense||'')).map(x=>{
   const m=/(\d{1,2})\/(\d{1,2})\s*[–-]\s*(\d{1,2})\/(\d{1,2})\s*(.*)$/.exec(x.extra||''); let ret=x.suspense, where='';
   if(m){ const y=+x.suspense.slice(0,4); let r=new Date(y,+m[3]-1,+m[4],12); if(r<new Date(x.suspense+'T00:00')) r.setFullYear(y+1); ret=iso(r); where=m[5].trim(); } else where=x.extra||'';
   return {id:'hs_'+x.id,name:flOf(stripCls(x.from)),kind:x.kind,depart:x.suspense,ret,where,legacy:true,by:x.by}; }); }
-function signouts(){ const list=(S.signout||[]).filter(x=>x.name&&/^\d{4}-\d{2}-\d{2}$/.test(x.depart)).map(x=>({...x,ret:/^\d{4}-\d{2}-\d{2}$/.test(x.ret)&&x.ret>=x.depart?x.ret:x.depart}));
+// only trips that ended in the last 45 days (or haven't happened yet) stream in; an older month is fetched once when someone opens it
+const SO_OLD={months:{},docs:{}};
+function loadSignoutMonth(ym){ if(!/^\d{4}-\d{2}$/.test(ym)||SO_OLD.months[ym]||!S.db||S.nodb) return; const start=ym+'-01'; if(start>=daysAgoIso(SO_WINDOW)) return;
+  SO_OLD.months[ym]='loading'; const [y,m]=ym.split('-').map(Number); const end=iso(new Date(y,m,0)); const until=iso(new Date(y,m,14));
+  S.db.collection('signout',{since:start,until}).get().then(q=>{ normCol('signout',q.docs.map(d=>({id:d.id,...d.data()}))).forEach(x=>SO_OLD.docs[x.id]=x); SO_OLD.months[ym]='done'; render(); }).catch(e=>{ console.warn(e); delete SO_OLD.months[ym]; }); }
+function signouts(){ const cur=S.signout||[]; const have=new Set(cur.map(x=>x.id)); const list=cur.concat(Object.values(SO_OLD.docs).filter(x=>!have.has(x.id))).filter(x=>x.name&&/^\d{4}-\d{2}-\d{2}$/.test(x.depart)).map(x=>({...x,ret:/^\d{4}-\d{2}-\d{2}$/.test(x.ret)&&x.ret>=x.depart?x.ret:x.depart}));
   const seen=new Set(list.map(x=>norm(x.name)+'|'+x.depart));
   return list.concat(legacyTrips().filter(x=>!seen.has(norm(x.name)+'|'+x.depart))).sort((a,b)=>a.depart.localeCompare(b.depart)||a.name.localeCompare(b.name)); }
 const outOn=(x,d)=>x.depart<=d&&d<=x.ret;
@@ -2263,7 +2317,7 @@ function soForm(st,forOthers){
 /* ---------- Exec: sign-out calendar ---------- */
 function signoutCalendar(){
   const st=S.edit.soCal||(S.edit.soCal={month:today().slice(0,7),day:today(),form:{kind:'eSSS'}});
-  const all=signouts(); const t=today(); const [y,m]=st.month.split('-').map(Number);
+  loadSignoutMonth(st.month); const all=signouts(); const t=today(); const [y,m]=st.month.split('-').map(Number);
   const first=new Date(y,m-1,1,12); const start=new Date(first); start.setDate(1-first.getDay());
   const cells=[]; for(let i=0;i<42;i++){ const d=new Date(start); d.setDate(start.getDate()+i); const k=iso(d); if(i>=35&&d.getMonth()!==m-1) break;
     const out=all.filter(x=>outOn(x,k)); const leaving=out.filter(x=>x.depart===k).length;
@@ -2316,8 +2370,9 @@ function prevMonth(ym){ const [y,m]=ym.split('-').map(Number); const d=new Date(
 function monthlyLogPanel(o){ // o: {kind:'exec'|'shirt', title, items:[], monthOf:x=>'YYYY-MM', header:[], row:x=>[]}
   const st=S.edit['log_'+o.kind]||(S.edit['log_'+o.kind]={});
   const t=today(); const cur=t.slice(0,7); const prev=prevMonth(cur); const day=+t.slice(8);
-  const months=[...new Set([cur,prev,...o.items.map(o.monthOf).filter(m=>/^\d{4}-\d{2}$/.test(m))])].sort().reverse().slice(0,12);
-  const pick=st.m||(day<=7?prev:cur);
+  const last6=[0,1,2,3,4,5].reduce((a)=>(a.push(prevMonth(a[a.length-1])),a),[cur]).slice(0,6);
+  const months=[...new Set([...last6,...o.items.map(o.monthOf).filter(m=>/^\d{4}-\d{2}$/.test(m))])].sort().reverse().slice(0,12);
+  const pick=st.m||(day<=7?prev:cur); if(o.ensure) o.ensure(pick);
   const rec=((D('staff/exports')||{})[o.kind]||{});
   const lastDay=new Date(+cur.slice(0,4),+cur.slice(5,7),0).getDate();
   const due=day<=7&&!rec[prev]?prev:day>=lastDay-2&&!rec[cur]?cur:null;
@@ -2361,7 +2416,7 @@ function vaultNormalize(v){ if(!v||typeof v!=='object'||Array.isArray(v)) v={}; 
   v.om=obj(v.om); v.om.items=objs(v.om.items); v.gift=obj(v.gift); v.gift.ledger=objs(v.gift.ledger); v.smw=obj(v.smw); v.smw.events=objs(v.smw.events);
   v.store=obj(v.store); ['months','costs','income'].forEach(k=>v.store[k]=objs(v.store[k])); v.settings=obj(v.settings); v.settings.rates={...d.settings.rates,...obj(v.settings.rates)};
   v.cul.forEach(r=>{ if(!Array.isArray(r.items)) r.items=[]; }); v.settings={...d.settings,...v.settings}; if(v.settings.lead!=null&&v.settings.mhLead==null) v.settings.mhLead=v.settings.lead; return v; }
-async function vaultApplyImport(){ // merge staff-only finance imports staged by Claude, then delete the staging doc
+async function vaultApplyImport(){ // merge a one-time finance import (staff/a46import) into the vault, then delete the staging record
   const imp=D('staff/a46import'); if(!V.key||!V.data||!imp||!imp.id||(V.data.imports||[]).includes(imp.id)) return;
   await vaultSave(v=>{
     if(imp.settings) v.settings={...v.settings,...imp.settings};
@@ -2390,7 +2445,7 @@ const A46_TABS=[['overview','Overview'],['plan','Budget calendar'],['cul','CUL']
 VIEWS.a46=function(){
   const d=D('a46/vault');
   if(S.nodb) return emptyState('Sign in to use the A4/6 tools.');
-  if(!S.ready) return h('div');
+  if(!S.ready||!loaded('a46/vault')) return h('div',{class:'banner info'},'Loading…');
   if(!V.key||!V.data) return a46Lock(d);
   vaultSync();
   const [cur,segEl]=seg('a46',A46_TABS,'overview');
@@ -2406,6 +2461,8 @@ function a46Lock(d){
     if(fresh){ if(!S.canEdit) { V.err='Only staff with edit access can set up the A4/6 passcode.'; return render(); } if(st.p.length<8){V.err='Use at least 8 characters.';return render();} if(st.p!==st.p2){V.err='The passcodes don’t match.';return render();} }
     V.busy=true; render();
     try{
+      // never start a new vault on top of an existing one (a slow connection could make it look empty)
+      if(fresh){ const live=await S.db.doc('a46/vault').get().catch(()=>null); if(!live||(live.exists&&live.data()&&live.data().ct)){ V.busy=false; V.err=live?'A passcode is already set. Reload and enter it.':'Couldn’t check the server. Try again.'; return render(); } }
       if(fresh){ const salt=crypto.getRandomValues(new Uint8Array(16)); const key=await deriveKey(st.p,salt); const data=vaultDefaults(); const enc=await vEncrypt(key,data); if(await setDoc('a46/vault',{v:1,salt:b64(salt),...enc,updated:new Date().toISOString()})){ V.key=key; V.data=data; V.lastCt=enc.ct; } }
       else { const key=await deriveKey(st.p,unb64(d.salt)); V.data=vaultNormalize(await vDecrypt(key,d)); V.key=key; V.lastCt=d.ct; }
       S.edit.lock=null;
@@ -2857,12 +2914,16 @@ function a46Plan(){
 </script>
 <script>
 /* ================= FIREBASE BACKEND =================
-   Swaps Claude's storage for Firebase (Auth + Firestore) behind the same small API the app already uses,
+   Connects the app to Firebase (Auth + Firestore) through one small storage API (doc / collection) that every tab uses,
    so every tab keeps working unchanged. Each record is stored as one JSON string ("j") because some
    grids hold arrays inside arrays, which Firestore can't store natively. */
 const FB={ state:'loading', user:null, member:null, fs:null, auth:null };
 const PUB_TABS=[];
-const OWNER=(window.CS12_OWNER||'').toLowerCase();
+// Nobody's personal account is built into the site. Who runs it lives on the access list itself:
+//   admin  = runs the site (access list, turnover, backups, can make other admins)
+//   staff  = squadron staff: edits squadron records and opens the locked tabs
+//   member = everyone else in the squadron
+const isStaffRole=r=>r==='staff'||r==='admin';
 
 function fbConfigured(){ const c=window.FIREBASE_CONFIG; return !!(c&&c.apiKey&&!/PASTE/.test(c.apiKey)&&window.firebase); }
 const MAX_DOC=900000;
@@ -2870,14 +2931,21 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 // Saves that collide with someone else's (busy record, flaky Wi-Fi) are retried with growing, randomized waits.
 async function withRetry(fn){ let last;
   for(let i=0;i<7;i++){ try{ return await fn(); }catch(e){ last=e; const c=(e&&e.code)||'';
-      if(!/aborted|unavailable|resource-exhausted|deadline-exceeded|internal|cancelled|failed-precondition/.test(c)) throw e;
+      if(!/aborted|unavailable|deadline-exceeded|internal|cancelled|failed-precondition/.test(c)) throw e;
       await sleep(Math.min(5000,200*2**i)+Math.random()*400); } }
   throw last; }
 // "own" = whoever created the record. It never changes on later edits, so the rules can tell who may delete it.
-function fbPack(obj,own){ const j=JSON.stringify(obj); if(j.length>MAX_DOC) throw Object.assign(new Error('too big'),{code:'quota_exceeded'});
-  return {j,by:FB.user.uid,own:own===undefined?FB.user.uid:own,at:firebase.firestore.FieldValue.serverTimestamp()}; }
+function fbPack(obj,own,path){ const j=JSON.stringify(obj); if(j.length>MAX_DOC) throw Object.assign(new Error('too big'),{code:'quota_exceeded'});
+  const out={j,by:FB.user.uid,own:own===undefined?FB.user.uid:own,at:firebase.firestore.FieldValue.serverTimestamp()};
+  const k=sortKeyOf(path,obj); if(k) out.k=k; return out; }
+// a plain date field Firestore can filter on: an eSSS trip's return date, so only current trips are downloaded
+// leader tasks and action items: 'open' or 'done', so My Squadron downloads only what's still open
+function sortKeyOf(path,obj){ if(!obj) return '';
+  if(/^ldrtasks\//.test(path||'')) return obj.status==='Done'?'done':'open';
+  if(/^actions\//.test(path||'')) return obj.done?'done':'open';
+  if(/^signout\//.test(path||'')){ const r=/^\d{4}-\d{2}-\d{2}$/.test(obj.ret||'')?obj.ret:obj.depart; return /^\d{4}-\d{2}-\d{2}$/.test(r||'')?r:''; } return ''; }
 const ownOf=s=>s.exists?(s.data().own===undefined?null:s.data().own):undefined;
-const fbDec=d=>{ if(!d) return null; if(typeof d.j==='string'){ try{ return JSON.parse(d.j); }catch(e){ return null; } } const {by,at,own,...rest}=d; return rest; };
+const fbDec=d=>{ if(!d) return null; if(typeof d.j==='string'){ try{ return JSON.parse(d.j); }catch(e){ return null; } } const {by,at,own,k,...rest}=d; return rest; };
 function fbMerge(base,patch){
   const out=(base&&typeof base==='object'&&!Array.isArray(base))?{...base}:{};
   for(const k in patch){ const v=patch[k];
@@ -2890,16 +2958,26 @@ function fbErr(e){ const c=e&&e.code||''; return Object.assign(new Error(e&&e.me
 
 function fbDb(){
   const fs=FB.fs;
-  const docApi=path=>{ const ref=fs.doc(path); return {
-    onSnapshot(cb,err){ return ref.onSnapshot(s=>cb({exists:s.exists,data:()=>fbDec(s.data())}), e=>{ if(e&&e.code==='permission-denied') cb({exists:false,data:()=>null}); else err&&err(e); }); },
-    async get(){ const s=await ref.get(); return {exists:s.exists,data:()=>fbDec(s.data())}; },
-    async set(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(obj,ownOf(s))); })); }catch(e){ throw fbErr(e); } },
-    async update(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(fbMerge(s.exists?fbDec(s.data()):{},obj),ownOf(s))); })); }catch(e){ throw fbErr(e); } },
+  // if Firestore refuses because the daily allowance is used up, show this browser's saved copy instead of nothing
+  const fallback=(get,cb,err)=>e=>{ if(e&&e.code==='permission-denied') return cb(null); if(e&&e.code==='resource-exhausted'){ get().then(cb).catch(()=>{}); } err&&err(e); };
+  const count=(s,n)=>{ if(!(s&&s.metadata&&s.metadata.fromCache)) FB.reads=(FB.reads||0)+n; };
+  const docApi=path=>{ const ref=fs.doc(path); const wrap=s=>({exists:s.exists,data:()=>fbDec(s.data())}); return {
+    onSnapshot(cb,err){ return ref.onSnapshot(s=>{ count(s,1); cb(wrap(s)); }, fallback(()=>ref.get({source:'cache'}).then(wrap),x=>cb(x||{exists:false,data:()=>null}),err)); },
+    async get(){ return wrap(await ref.get()); },
+    async set(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(obj,ownOf(s),path)); })); }catch(e){ throw fbErr(e); } },
+    async update(obj){ try{ await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); t.set(ref,fbPack(fbMerge(s.exists?fbDec(s.data()):{},obj),ownOf(s),path)); })); }catch(e){ throw fbErr(e); } },
     // read the newest copy, change it, save it, all as one step: two people editing a list at once can't erase each other's edits
-    async mutate(fn){ try{ return await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); const next=await fn(s.exists?fbDec(s.data()):null); if(next===undefined) return false; t.set(ref,fbPack(next,ownOf(s))); return true; })); }catch(e){ throw fbErr(e); } },
+    async mutate(fn){ try{ return await withRetry(()=>fs.runTransaction(async t=>{ const s=await t.get(ref); const next=await fn(s.exists?fbDec(s.data()):null); if(next===undefined) return false; t.set(ref,fbPack(next,ownOf(s),path)); return true; })); }catch(e){ throw fbErr(e); } },
     async delete(){ try{ await withRetry(()=>ref.delete()); }catch(e){ throw fbErr(e); } } }; };
-  const colApi=(path,opts)=>({ onSnapshot(cb,err){ let q=fs.collection(path); if(opts&&opts.newest){ q=q.orderBy('at','desc').limit(opts.newest); }
-    return q.onSnapshot(qs=>cb({docs:qs.docs.map(d=>({id:d.id,data:()=>fbDec(d.data())}))}), e=>{ if(e&&e.code==='permission-denied') cb({docs:[]}); else err&&err(e); }); } });
+  const query=(path,opts)=>{ let q=fs.collection(path); opts=opts||{};
+    if(opts.eq){ q=q.where('k','==',opts.eq).limit(opts.max||300); }
+    else if(opts.since||opts.until){ if(opts.since) q=q.where('k','>=',opts.since); if(opts.until) q=q.where('k','<=',opts.until); q=q.limit(opts.max||800); }
+    else if(opts.newest) q=q.orderBy('at','desc').limit(opts.newest);
+    return q; };
+  const wrapQ=qs=>({docs:qs.docs.map(d=>({id:d.id,data:()=>fbDec(d.data())}))});
+  const colApi=(path,opts)=>({
+    onSnapshot(cb,err){ const q=query(path,opts); return q.onSnapshot(qs=>{ count(qs,qs.docChanges?qs.docChanges().length:qs.docs.length); cb(wrapQ(qs)); }, fallback(()=>q.get({source:'cache'}).then(wrapQ),x=>cb(x||{docs:[]}),err)); },
+    async get(){ return wrapQ(await query(path,opts).get()); } });
   return {doc:docApi, collection:colApi};
 }
 function fbDownloads(){ return {save:async({filename,data})=>{ const blob=data instanceof Blob?data:new Blob([data]); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=filename; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),8000); return {status:'saved'}; }}; }
@@ -2925,8 +3003,8 @@ async function photoFull(id,fallback){
   try{ w.opener=null; w.document.title='CS-12 photo'; w.document.body.style.cssText='margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh';
     const img=w.document.createElement('img'); img.src=d; img.alt='Squadron photo'; img.style.cssText='max-width:100%;max-height:100vh'; w.document.body.appendChild(img);
   }catch(e){ w.close(); toast('Couldn’t open the photo.'); } }
-function fbUser(){ const u=FB.user, m=FB.member||{}; const owner=!!OWNER&&(u.email||'').toLowerCase()===OWNER;
-  return { id:async()=>u.uid, isOwner:async()=>owner, canEdit:async()=>owner||m.role==='staff', can:async()=>true }; }
+function fbUser(){ const u=FB.user, m=FB.member||{};
+  return { id:async()=>u.uid, isOwner:async()=>m.role==='admin', canEdit:async()=>isStaffRole(m.role), can:async()=>true }; }
 
 /* ---------- sign-in ---------- */
 async function fbGoogle(){ const p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
@@ -3008,7 +3086,7 @@ function signInPanel(){
         mode!=='reset'?h('button',{type:'button',class:'linkbtn',onclick:()=>set('reset')},'Forgot password?'):null),
       offHost()?h('div',{class:'banner bad small',style:'margin-top:12px'},h('b',null,'Careful: '),`this page isn’t at the official CS-12 address (${OFFICIAL_HOST}). Don’t enter your password here.`):null,
       h('p',{class:'small muted',style:'margin:12px 0 0'},'Only emails on the CS-12 access list can get in. Only ever sign in at ',h('b',null,OFFICIAL_HOST),'. Squadron staff will never ask for your password.'),
-      h('button',{type:'button',class:'linkbtn small',style:'margin:10px auto 0;display:block',onclick:fbGoogle},'Site owner: sign in with Google'));
+      h('button',{type:'button',class:'linkbtn small',style:'margin:10px auto 0;display:block',onclick:fbGoogle},'Or sign in with a Google account'));
   }
   if(FB.state==='checking') return h('div',{class:'panel lock'},logo,h('p',{class:'muted'},'Checking the access list…'));
   if(FB.state==='checkfail') return h('div',{class:'panel lock'},logo,h('h2',{class:'pg'},'Couldn’t check access'),
@@ -3020,35 +3098,61 @@ function signInPanel(){
   return h('div',{class:'panel lock'},h('img',{src:'logo.png',alt:'',style:'height:76px;width:auto;margin:0 auto'}),h('p',{class:'muted'},'Checking your sign-in…'));
 }
 
-/* ---------- Access tab (staff): approve members, set staff, import data ---------- */
-VIEWS.access=function(){
+/* ---------- People & access (Admin tab): approve members, set staff/admin, clear out graduated classes ---------- */
+const ROLE_LABEL={member:'member',staff:'staff',admin:'admin'};
+const classOfEmail=e=>{ const m=/^c(\d{2})/i.exec(String(e||'')); return m?'20'+m[1]:''; };
+const firstieYear=()=>{ const d=new Date(); return d.getMonth()>=5?d.getFullYear()+1:d.getFullYear(); };
+function watchMembers(){ live('members',()=>FB.fs.collection('members').onSnapshot(q=>{FB.members=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{})); noteUse('members'); }
+function accessPanel(){
   if(!S.canEdit) return emptyState('Staff only.');
+  watchMembers();
+  const admin=!!S.isOwner;
   const st=S.edit.acc||(S.edit.acc={email:'',role:'member',name:''});
-  const reqs=FB.requests||[], mems=(FB.members||[]).slice().sort((a,b)=>(a.role===b.role?0:a.role==='staff'?-1:1)||a.id.localeCompare(b.id));
-  const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); if(!name) name=nameFromEmail(e); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('Only staff can do that.'); } };
-  const remove=async e=>{ try{ await FB.fs.doc('members/'+e).delete(); toast('Removed'); }catch(x){ toast('Only staff can do that.'); } };
-  return h('div',{class:'stack'},head('Access','Who can sign in to the squadron hub. Staff get edit rights and the locked tabs.'),
+  const reqs=FB.requests||[], all=FB.members||[];
+  const rank=r=>r==='admin'?0:r==='staff'?1:2;
+  const admins=all.filter(m=>m.role==='admin');
+  const q=norm(st.q||'');
+  const mems=all.filter(m=>!q||norm(m.id+' '+(m.name||'')+' '+m.role).includes(q)).sort((a,b)=>rank(a.role)-rank(b.role)||a.id.localeCompare(b.id));
+  const canTouch=m=>admin||m.role!=='admin';
+  const approve=async(e,role,name)=>{ e=e.trim().toLowerCase(); if(!/@/.test(e)) return toast('Enter an email address.'); if(role==='admin'&&!admin) return toast('Only a site admin can make admins.'); if(!name) name=nameFromEmail(e); try{ await FB.fs.doc('members/'+e).set({role,name:name||'',added:new Date().toISOString(),addedBy:FB.user.email}); await FB.fs.doc('requests/'+e).delete().catch(()=>{}); toast('Access granted'); }catch(x){ toast('You don’t have permission to do that.'); } };
+  const lastAdmin=m=>m.role==='admin'&&admins.length<=1;
+  const remove=async m=>{ if(lastAdmin(m)) return toast('Make someone else an admin first. The site always needs at least one.'); try{ await FB.fs.doc('members/'+m.id).delete(); toast('Removed'); }catch(x){ toast('You don’t have permission to do that.'); } };
+  const setRole=async(m,r)=>{ if(lastAdmin(m)&&r!=='admin'){ toast('Make someone else an admin first. The site always needs at least one.'); return render(); }
+    try{ await FB.fs.doc('members/'+m.id).set({role:r},{merge:true}); toast('Access changed'); }catch(x){ toast('You don’t have permission to do that.'); render(); } };
+  // members grouped by class year from their email, so a graduated class can be cleared in one go
+  const fy=firstieYear(); const byClass={}; all.forEach(m=>{ const y=classOfEmail(m.id)||'other'; (byClass[y]=byClass[y]||[]).push(m); });
+  const classRow=y=>{ const l=byClass[y]; const grad=y!=='other'&&+y<fy; const keep=l.filter(m=>m.role==='admin'); const go=l.filter(m=>m.role!=='admin'&&m.id!==FB.user.email.toLowerCase());
+    return h('li',null,y==='other'?h('b',null,'Other emails'):clsTag(y,'Class of '+y),h('span',{class:'grow small muted'},`${l.length} ${l.length===1?'person':'people'}`+(grad?' · graduated':'')+(keep.length?` · ${keep.length} admin${keep.length===1?'':'s'} (kept)`:'')),
+      y!=='other'&&go.length?confirmBtn(`Remove ${go.length}`,async()=>{ try{ let b=FB.fs.batch(),k=0; for(const m of go){ b.delete(FB.fs.doc('members/'+m.id)); if(++k>=200){ await b.commit(); b=FB.fs.batch(); k=0; } } if(k) await b.commit(); toast(`Removed ${go.length} from the Class of ${y}`); }catch(x){ toast('Only staff can do that.'); } },grad?'btn sm danger':'btn sm'):null); };
+  const roleOpts=m=>(admin?['member','staff','admin']:m.role==='admin'?['admin']:['member','staff']);
+  return h('div',{class:'stack'},
+    admins.length===0&&all.length?h('div',{class:'banner bad'},h('b',null,'No site admin. '),'Someone must be an admin to run turnover and backups. In the Firebase console → Firestore → members → pick the person → set ',h('code',null,'role'),' to ',h('code',null,'admin'),'.'):
+    admins.length===1?h('div',{class:'banner warn small'},h('b',null,'Only one site admin. '),'Add a second (ideally from a younger class) so the site never depends on one person.'):null,
     h('div',{class:'banner info small'},'The site works out who someone is from their sign-in email (for example c27first.last@afacademy.af.edu → First Last on the roster). If it can’t tell, or they sign in with another email, type their roster name in the Name column.'),
     h('div',{class:'grid2'},
-      h('div',{class:'panel'},h('h3',null,'Requests ',reqs.length?h('span',{class:'chip Sent'},String(reqs.length)):null),
-        reqs.length?h('ul',{class:'list'},reqs.map(r=>h('li',null,h('div',{class:'grow'},h('b',null,r.name||'(no name)'),h('div',{class:'small muted mono'},r.id)),
-          h('button',{class:'btn sm pri',onclick:()=>approve(r.id,'member',r.name)},'Approve'),h('button',{class:'btn sm',onclick:()=>approve(r.id,'staff',r.name)},'As staff'),
-          confirmBtn('Deny',()=>FB.fs.doc('requests/'+r.id).delete().catch(()=>toast('Only staff can do that.')))))):h('p',{class:'muted'},'No one is waiting.'),
-        h('h4',{style:'margin-top:16px'},'Add a list of people'),
-        h('p',{class:'small muted',style:'margin:0 0 6px'},'Paste one person per line: email, then a name if you like. Add the word staff on a line to give that person staff access. Example: jane.doe@afacademy.af.edu, Jane Doe, staff'),
-        h('textarea',{id:'acbulk',rows:6,placeholder:'c27first.last@afacademy.af.edu, First Last\nfriend@gmail.com, Name, staff',value:st.bulk||'',oninput:e=>st.bulk=e.target.value}),
-        h('button',{class:'btn pri',style:'margin-top:8px',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const n=await fbBulkAdd(st.bulk||'',mems); if(n){ st.bulk=''; toast(`Added ${n} ${n===1?'person':'people'}`+(fbBulkAdd.skipped?` · skipped ${fbBulkAdd.skipped} line${fbBulkAdd.skipped===1?'':'s'} with no email`:'')); render(); } }finally{ b.disabled=false; } }},'Add everyone'),
-        h('h4',{style:'margin-top:16px'},'Add one person'),
-        h('div',{class:'fgrid'},fld(st,'email','Email',{id:'acem'}),fld(st,'name','Name',{id:'acnm'}),fld(st,'role','Access',{type:'select',options:['member','staff'],id:'acrl'})),
-        h('button',{class:'btn pri',style:'margin-top:8px',onclick:()=>{ approve(st.email,st.role,st.name); st.email=''; st.name=''; }},'Add')),
-      h('div',{class:'panel'},h('h3',null,`Members (${mems.length})`),
+      h('div',{class:'stack'},
+        h('div',{class:'panel'},h('h3',null,'Requests ',reqs.length?h('span',{class:'chip Sent'},String(reqs.length)):null),
+          reqs.length?h('ul',{class:'list'},reqs.map(r=>h('li',null,h('div',{class:'grow'},h('b',null,r.name||'(no name)'),h('div',{class:'small muted mono'},r.id)),
+            h('button',{class:'btn sm pri',onclick:()=>approve(r.id,'member',r.name)},'Approve'),h('button',{class:'btn sm',onclick:()=>approve(r.id,'staff',r.name)},'As staff'),
+            confirmBtn('Deny',()=>FB.fs.doc('requests/'+r.id).delete().catch(()=>toast('Only staff can do that.')))))):h('p',{class:'muted'},'No one is waiting.'),
+          h('h4',{style:'margin-top:16px'},'Add a list of people'),
+          h('p',{class:'small muted',style:'margin:0 0 6px'},'Paste one person per line: email, then a name if you like. Add the word staff on a line to give that person staff access. Example: jane.doe@afacademy.af.edu, Jane Doe, staff'),
+          h('textarea',{id:'acbulk',rows:6,placeholder:'c27first.last@afacademy.af.edu, First Last\nfriend@gmail.com, Name, staff',value:st.bulk||'',oninput:e=>st.bulk=e.target.value}),
+          h('button',{class:'btn pri',style:'margin-top:8px',onclick:async ev=>{ const b=ev.currentTarget; b.disabled=true; try{ const n=await fbBulkAdd(st.bulk||'',all); if(n){ st.bulk=''; toast(`Added ${n} ${n===1?'person':'people'}`+(fbBulkAdd.skipped?` · skipped ${fbBulkAdd.skipped} line${fbBulkAdd.skipped===1?'':'s'} with no email`:'')); render(); } }finally{ b.disabled=false; } }},'Add everyone'),
+          h('h4',{style:'margin-top:16px'},'Add one person'),
+          h('div',{class:'fgrid'},fld(st,'email','Email',{id:'acem'}),fld(st,'name','Name',{id:'acnm'}),fld(st,'role','Access',{type:'select',options:admin?['member','staff','admin']:['member','staff'],id:'acrl'})),
+          h('button',{class:'btn pri',style:'margin-top:8px',onclick:()=>{ approve(st.email,st.role,st.name); st.email=''; st.name=''; }},'Add')),
+        h('div',{class:'panel'},h('h3',null,'By class'),h('p',{class:'small muted',style:'margin:0 0 6px'},'After graduation, remove the graduated class in one click. Admins are never removed this way: hand admin to someone else first.'),
+          h('ul',{class:'list'},Object.keys(byClass).sort().map(classRow)))),
+      h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},`Members (${all.length})`),h('span',{class:'spacer'}),h('input',{type:'text',placeholder:'Search…',value:st.q||'',style:'max-width:180px',onchange:e=>{st.q=e.target.value;render()}})),
+        h('p',{class:'small muted'},h('b',null,'admin'),' runs the site (access, turnover, backups) · ',h('b',null,'staff'),' edits squadron records and opens the locked tabs · ',h('b',null,'member'),' everyone else.'),
         mems.length?h('div',{class:'tw',style:'max-height:60vh'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Email'),h('th',null,'Name'),h('th',null,'Access'),h('th',null,''))),
-          h('tbody',null,mems.map(m=>h('tr',null,h('td',{class:'small mono',style:'overflow-wrap:anywhere'},m.id),h('td',null,h('input',{type:'text','aria-label':'Roster name for '+m.id,value:m.name||'',placeholder:'Name as on the roster',style:'min-width:150px;padding:3px 6px',onchange:e=>FB.fs.doc('members/'+m.id).set({name:e.target.value.trim()},{merge:true}).then(()=>toast('Name saved')).catch(()=>toast('Only staff can do that.'))})),
-            h('td',null,h('select',{'aria-label':'Access for '+m.id,onchange:e=>FB.fs.doc('members/'+m.id).set({role:e.target.value},{merge:true}).catch(()=>toast('Only staff can do that.'))},['member','staff'].map(o=>{ const op=h('option',{value:o},o); if(m.role===o) op.selected=true; return op; }))),
-            h('td',null,m.id===OWNER?h('span',{class:'small muted'},'owner'):confirmBtn('Remove',()=>remove(m.id)))))))):h('p',{class:'muted'},'No members yet. Approve requests or add people on the left.'))),
-    S.isOwner?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'One-time move from the Claude version. Pick the cs12-data-import.json file (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced.'),
+          h('tbody',null,mems.map(m=>h('tr',null,h('td',{class:'small mono',style:'overflow-wrap:anywhere'},clsTag(classOfEmail(m.id))||null,' ',m.id),h('td',null,h('input',{type:'text','aria-label':'Roster name for '+m.id,value:m.name||'',placeholder:'Name as on the roster',disabled:!canTouch(m),style:'min-width:150px;padding:3px 6px',onchange:e=>FB.fs.doc('members/'+m.id).set({name:e.target.value.trim()},{merge:true}).then(()=>toast('Name saved')).catch(()=>toast('You don’t have permission to do that.'))})),
+            h('td',null,h('select',{'aria-label':'Access for '+m.id,disabled:!canTouch(m),onchange:e=>setRole(m,e.target.value)},roleOpts(m).map(o=>{ const op=h('option',{value:o},ROLE_LABEL[o]); if(m.role===o) op.selected=true; return op; }))),
+            h('td',null,canTouch(m)&&!lastAdmin(m)?confirmBtn('Remove',()=>remove(m)):h('span',{class:'small muted'},m.role==='admin'?'admin':''))))))):h('p',{class:'muted'},'No members match.'))),
+    admin?h('div',{class:'panel'},h('h3',null,'Import squadron data'),h('p',{class:'small muted'},'First setup only: load the original data file (cs12-data-import.json) (keep that file private, don’t upload it to GitHub). Existing records with the same name are replaced. To restore a full backup, use Backups instead.'),
       h('input',{type:'file',accept:'application/json,.json',onchange:async e=>{ const f=e.target.files[0]; if(!f) return; try{ const data=JSON.parse(await f.text()); const n=await fbImport(data); toast(`Imported ${n} records`); }catch(x){ console.error(x); toast('Import failed: '+(x.message||x)); } }})):null);
-};
+}
 // c27first.last@afacademy.af.edu -> the matching roster name ("First Last"), else the name spelled out from the email
 function nameFromEmail(em){ const guess=emailToName(em); if(!guess||!/^c\d{2}/i.test(String(em))) return ''; const p=allPeople().filter(x=>norm(x.name)===norm(guess)||sameName(x.name,guess));
   if(new Set(p.map(x=>x.name)).size===1) return p[0].name; return guess.split(' ').map(w=>w.split('-').map(x=>x?x[0].toUpperCase()+x.slice(1):x).join('-')).join(' '); }
@@ -3069,13 +3173,13 @@ async function fbBulkAdd(text,mems){
   }catch(x){ console.error(x); toast('Only staff can add people.'); return 0; }
   return n; }
 async function fbImport(data){ const paths=Object.keys(data); let b=FB.fs.batch(), n=0, inBatch=0;
-  for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbPack(data[p],null)); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
+  for(const p of paths){ if(p.split('/').length%2) continue; b.set(FB.fs.doc(p),fbPack(data[p],null,p)); n++; if(++inBatch>=200){ await b.commit(); b=FB.fs.batch(); inBatch=0; } }
   if(inBatch) await b.commit(); return n; }
 
 /* ---------- boot ---------- */
 const _appBoot=boot;
 function publicMode(){
-  window.PUBLIC=true; window.claude=undefined;
+  window.PUBLIC=true; window.cs12api=undefined;
   TABS.splice(0,TABS.length);
   S.ready=true; S.nodb=false; S.db=null; S.canEdit=false; S.canWrite=false; S.downloads=null; S.docs={};
   sendHeadsUp=async()=>{}; saveMyDraft=async()=>{}; sendDiscipline=async()=>{};
@@ -3105,13 +3209,12 @@ boot=async function(){
       try{ if(i>0){ try{ await u.getIdToken(true); }catch(e){} } const s=await FB.fs.doc('members/'+em).get({source:'server'}); m=s.exists?s.data():null; checkErr=null; break; }
       catch(e){ checkErr=e; console.warn('access check',i,e&&e.code); await sleep(Math.min(4000,300*2**i)); }
     }
-    if(checkErr&&!(OWNER&&em===OWNER)){ FB.state='checkfail'; FB.checkErr=checkErr; S.tab='hub'; render(); return; }
-    if(!m&&OWNER&&em===OWNER){ m={role:'staff',name:'Owner'}; try{ await FB.fs.doc('members/'+em).set({role:'staff',name:u.displayName||'Owner',added:new Date().toISOString()},{merge:true}); }catch(e){} }
+    if(checkErr){ FB.state='checkfail'; FB.checkErr=checkErr; S.tab='hub'; render(); return; }
     if(!m){ FB.state='pending'; S.tab='hub'; render();
       // if staff add this email while the person is waiting, let them straight in
       FB.fs.doc('members/'+em).onSnapshot(s=>{ if(s.exists) location.reload(); },()=>{});
       return; }
-    const role=(m.role==='staff'||em===OWNER)?'staff':'member';
+    const role=isStaffRole(m.role)?'staff':'member';
     if(idleCheck(role)) return;
     ['pointerdown','keydown'].forEach(ev=>document.addEventListener(ev,markActive,{passive:true}));
     setInterval(()=>idleCheck(role),5*60e3);
@@ -3119,19 +3222,19 @@ boot=async function(){
     { const key='builder:'+u.uid; const mine=ls(key); const legacy=ls('builder'); Object.keys(B).forEach(k=>delete B[k]); Object.assign(B,mine||legacy||{}); if(legacy){ try{ localStorage.removeItem('cs12:builder'); }catch(e){} if(!mine) ls(key,B); }
       bsave=function(){ clearTimeout(bsave.t); bsave.t=setTimeout(()=>ls(key,B),400); }; }
     started=true; FB.state='member'; FB.member=m; window.PUBLIC=false;
-    TABS.splice(0,TABS.length,...FULL_TABS); if(m.role==='staff'||em===OWNER) TABS.push(['access','Access 🔑']);
+    TABS.splice(0,TABS.length,...FULL_TABS); if(isStaffRole(m.role)) TABS.push(['access','Admin 🔑']);
     S.tab=TABS.some(t=>t[0]===want)?want:'home';
     sendHeadsUp=_sendHeadsUp; saveMyDraft=_saveMyDraft; sendDiscipline=_sendDiscipline;
     const db=fbDb(), user=fbUser(), dl=fbDownloads(), assets=fbAssets();
-    window.claude={use:async cap=>({db,user,downloads:dl,assets})[cap]||null};
+    window.cs12api={use:async cap=>({db,user,downloads:dl,assets})[cap]||null};
     S.ready=false; S.docs={};
     await _appBoot();
     fbStartCq(); fbStartTk();
-    // if staff remove this person from the access list, close their session right away
-    if(em!==OWNER) FB.fs.doc('members/'+em).onSnapshot(s=>{ if(!s.exists) location.reload(); },()=>{});
+    // if staff remove this person from the access list (or change their access), reload so the change takes effect
+    FB.fs.doc('members/'+em).onSnapshot(s=>{ if(!s.exists||(s.data()||{}).role!==m.role) location.reload(); },()=>{});
     if(S.canEdit){
-      FB.fs.collection('requests').onSnapshot(q=>{FB.requests=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
-      FB.fs.collection('members').onSnapshot(q=>{FB.members=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{});
+      live('requests',()=>FB.fs.collection('requests').onSnapshot(q=>{FB.requests=q.docs.map(d=>({id:d.id,...d.data()}));schedule()},()=>{}));
+      setTimeout(staffUpkeep,4000);
     }
   });
 };
@@ -3145,7 +3248,7 @@ function fbStartCq(){
   S.overlay['cq/board']=doc=>{ if(_cqMemo&&_cqMemo.doc===doc&&_cqMemo.cq===FB.cq) return _cqMemo.out; const fill={...(doc.fill||{})};
     for(const k in FB.cq){ const e=FB.cq[k]; if(e&&typeof e==='object'&&typeof e.v==='string') fill[k]=e.v; }
     const out={...doc,fill}; _cqMemo={doc,cq:FB.cq,out}; return out; };
-  FB.fs.doc('cqfill/all').onSnapshot(s=>{ FB.cq=s.exists?(s.data()||{}):{}; fbMigrateCq(); schedule(); },()=>{});
+  (S.onUse=S.onUse||{})['cq/board']=()=>live('cqfill',()=>FB.fs.doc('cqfill/all').onSnapshot(s=>{ FB.cq=s.exists?(s.data()||{}):{}; fbMigrateCq(); schedule('d:cq/board'); },e=>liveErr('cqfill',e)));
 }
 async function cqWrite(id,v){
   if(!/^[\w-]{1,40}$/.test(id)) return;
@@ -3161,7 +3264,7 @@ function fbStartTk(){
     for(const pid in (doc.status||{})) status[pid]={...doc.status[pid]};
     for(const k in FB.tk){ const e=FB.tk[k]; const m=/^(.+)__(.+)$/.exec(k); if(!m||!e||typeof e.v!=='string') continue; (status[m[1]]=status[m[1]]||{})[m[2]]=e.v; }
     const out={...doc,status}; _tkMemo={doc,tk:FB.tk,out}; return out; };
-  FB.fs.doc('tkdone/all').onSnapshot(s=>{ FB.tk=s.exists?(s.data()||{}):{}; schedule(); },()=>{});
+  (S.onUse=S.onUse||{})['taskers/board']=()=>live('tkdone',()=>FB.fs.doc('tkdone/all').onSnapshot(s=>{ FB.tk=s.exists?(s.data()||{}):{}; schedule('d:taskers/board'); },e=>liveErr('tkdone',e)));
 }
 async function tkWrite(pid,cid,v){
   const k=pid+'__'+cid; if(!/^[\w-]{1,40}__[\w-]{1,40}$/.test(k)) return;
@@ -3198,6 +3301,358 @@ renderTabs=function(){ _renderTabs0();
   else who.replaceChildren();
   $('#tabs').hidden=FB.state!=='member';
 };
+</script>
+<script>
+/* ================= ADMIN: people, semester turnover, backups, site health =================
+   Everything a new squadron staff needs to take the site over lives here, inside the site, so it never depends
+   on one person: who has access, the new-semester checklist, full backups, and the handbook. */
+const PROJECT_ID=((window.FIREBASE_CONFIG||{}).projectId)||'';
+const CONSOLE=p=>'https://console.firebase.google.com/project/'+PROJECT_ID+(p||'');
+const GH_ORG='cadet-squadron-12';
+const daysSince=isoStr=>isoStr?Math.floor((Date.now()-new Date(isoStr).getTime())/864e5):null;
+
+VIEWS.access=function(){
+  if(!S.canEdit) return emptyState('Staff only.');
+  const admin=!!S.isOwner;
+  const meta=D('staff/meta')||{}; const ago=daysSince(meta.lastBackup);
+  const [cur,segEl]=seg('admin',[['people','People & access'],['turnover','New semester'],['backup','Backups'],['settings','Site settings'],['health','Site health & handbook']],'people');
+  const body={people:accessPanel,turnover:turnoverView,backup:backupView,settings:settingsView,health:healthView}[cur]||accessPanel;
+  return h('div',{class:'stack'},head('Admin',admin?'You’re a site admin. Run access, semester turnover and backups from here.':'Staff can manage the access list. Turnover, backups and admins are run by a site admin.',segEl),
+    admin&&(ago===null||ago>30)&&cur!=='backup'?h('div',{class:'banner warn small'},h('b',null,ago===null?'No backup yet. ':`Last backup was ${ago} days ago. `),'Download one from Backups and keep it in the squadron’s private Teams files.'):null,
+    body());
+};
+
+/* ---------- step card for the turnover checklist ---------- */
+function stepCard(tv,key,n,title,lede,...content){
+  const done=!!(tv.done||{})[key];
+  return h('div',{class:'panel'+(done?' done':'')},
+    h('div',{class:'row'},h('span',{class:'chip '+(done?'Approved':'Drafted')},done?'Done':'Step '+n),h('h3',{style:'margin:0;flex:1'},title),
+      h('label',{class:'small',style:'display:flex;gap:6px;align-items:center'},h('input',{type:'checkbox',checked:done,onchange:e=>markStep(key,e.target.checked)}),'Done')),
+    lede?h('p',{class:'small muted',style:'margin:6px 0 10px'},lede):null, ...content);
+}
+async function markStep(key,v){ await mutDoc('staff/turnover',d=>{ d.done=d.done||{}; d.done[key]=v?{by:whoAmI(),at:new Date().toISOString()}:null; if(!v) delete d.done[key]; return d; }); }
+function termName(){ const d=new Date(), y=d.getFullYear(), m=d.getMonth(); return m>=5&&m<=11?`Fall ${y}`:`Spring ${m<=4?y:y+1}`; }
+
+function turnoverView(){
+  const admin=!!S.isOwner;
+  const tv=D('staff/turnover')||{};
+  const steps=['backup','umd','staff','grads','admins','reset','continuity','a46','contacts','accounts'];
+  const nDone=steps.filter(k=>(tv.done||{})[k]).length;
+  return h('div',{class:'stack'},
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'New semester turnover'),h('span',{class:'spacer'}),h('b',null,`${nDone} of ${steps.length} done`),
+        admin?confirmBtn('Start a new checklist',()=>setDoc('staff/turnover',{term:termName(),started:new Date().toISOString(),by:whoAmI(),done:{}}),'btn sm'):null),
+      h('p',{class:'small muted',style:'margin:6px 0 0'},`${tv.term||termName()} · Do these in order each time the UMD changes (start of each semester, or when command staff rotates). Everything here is undoable from a backup, which is why step 1 comes first.`)),
+    stepCard(tv,'backup',1,'Download a backup','A complete copy of the site’s data as one file. Keep it in the squadron’s private Teams files (never on GitHub: it has emails and the door code).',backupButton()),
+    stepCard(tv,'umd',2,'Load the new UMD','Copy the whole UMD from Excel (section rows and people) and paste it below. You’ll see a preview and a check of the jobs the site relies on before anything is replaced.',umdPastePanel()),
+    stepCard(tv,'staff',3,'Give staff access to the new command staff','Staff access follows the UMD: the people in Squadron Command Staff get it, everyone else is a member. Review, then apply.',staffSuggestPanel()),
+    stepCard(tv,'grads',4,'Clear out the graduated class','Removes their access. Admins are kept until they hand off (next step).',h('button',{class:'btn',onclick:()=>{ S.sub.admin='people'; ls('sub',S.sub); render(); }},'Open People & access → By class')),
+    stepCard(tv,'admins',5,'Hand off site admin',null,adminHealth()),
+    stepCard(tv,'reset',6,'Reset last semester’s boards','Clears sign-ups and check-offs that belonged to the old schedule. Rooming, lockers and Mitch’s seating stay; the SEL updates them.',resetPanel()),
+    stepCard(tv,'continuity',7,'Outgoing staff update the continuity book','Every job has a page in Squadron Info → Continuity book. The outgoing person writes what they wish they’d been told; the incoming person reads it first.',h('button',{class:'btn',onclick:()=>{ S.sub.info='book'; go('links'); }},'Open the continuity book')),
+    stepCard(tv,'a46',8,'Hand over the A4/6 passcode','The A4/6 finances are encrypted with a passcode that cannot be recovered. The outgoing A4/6 tells the incoming one in person; the incoming A4/6 then changes it (A4/6 → Settings → Change passcode).'),
+    stepCard(tv,'contacts',9,'Update leadership contacts and links','Squadron Info → Contacts & links: commander, AMT, emails and phone numbers.',h('button',{class:'btn',onclick:()=>{ S.sub.info='info'; go('links'); }},'Open Squadron Info')),
+    stepCard(tv,'accounts',10,'Outside the site: hand over the accounts','The site itself runs on two free accounts. New admins need to be owners of both, and graduating ones removed.',accountsChecklist()));
+}
+
+/* ---------- accounts checklist (Firebase + GitHub) ---------- */
+function accountsChecklist(){
+  const li=(t,...rest)=>h('li',null,h('div',{class:'grow'},h('b',null,t),h('div',{class:'small muted'},...rest)));
+  return h('ul',{class:'list'},
+    li('Firebase (data and sign-in): ','Add each new admin as an ',h('b',null,'Owner'),' in ',h('a',{href:CONSOLE('/settings/iam'),target:'_blank',rel:'noopener'},'Firebase → Project settings → Users and permissions'),'. Remove people who graduated. Keep at least two owners from different classes, plus one permanent-party backstop (the Commander or AMT).'),
+    li('GitHub (the web address and files): ','Add each new admin as an ',h('b',null,'Owner'),' of ',h('a',{href:'https://github.com/orgs/'+GH_ORG+'/people',target:'_blank',rel:'noopener'},'github.com/'+GH_ORG),'. Same rule: two cadet owners from different classes plus a backstop.'),
+    li('Squadron Google account (if you made one): ','Update its recovery phone and email to the incoming admin or the AMT, and change its password.'),
+    li('Check it works: ','Have an incoming admin sign in, open Admin → Site health, and download a backup themselves.'));
+}
+
+/* ---------- admins: who runs the site and whether that's safe ---------- */
+function adminHealth(){
+  watchMembers(); const all=FB.members||[]; const admins=all.filter(m=>m.role==='admin'); const fy=firstieYear();
+  const yrs=[...new Set(admins.map(m=>classOfEmail(m.id)).filter(Boolean))];
+  const allLeaving=admins.length&&admins.every(m=>{ const y=classOfEmail(m.id); return y&&+y<=fy; });
+  const msgs=[];
+  if(admins.length<2) msgs.push('Have at least two admins.');
+  if(yrs.length<2) msgs.push('Pick admins from at least two different classes so one graduation can’t remove all of them.');
+  if(allLeaving) msgs.push('Every admin is a firstie (or already graduated). Make someone from a younger class an admin now.');
+  return h('div',null,
+    msgs.length?h('div',{class:'banner warn small'},msgs.join(' ')):h('div',{class:'banner ok small'},'Good: more than one admin, across more than one class.'),
+    h('ul',{class:'list'},admins.map(m=>h('li',null,clsTag(classOfEmail(m.id))||null,h('div',{class:'grow'},h('b',null,m.name||m.id),h('div',{class:'small muted mono'},m.id))))),
+    h('p',{class:'small muted'},'Make someone an admin in People & access (only an admin can). If the site ever has no admin at all, a Firebase project owner can fix it in the ',h('a',{href:CONSOLE('/firestore/databases/-default-/data/~2Fmembers'),target:'_blank',rel:'noopener'},'Firebase console → Firestore → members'),': open the person’s email and set role to admin.'));
+}
+
+/* ---------- reset last semester's boards ---------- */
+function resetPanel(){
+  const del=firebase.firestore.FieldValue.delete;
+  const btn=(label,fn)=>confirmBtn(label,async()=>{ try{ await fn(); toast('Done'); }catch(e){ console.warn(e); toast('That didn’t finish. Try again.'); } },'btn sm');
+  return h('div',{class:'row',style:'flex-wrap:wrap;gap:8px'},
+    btn('Clear CQ sign-ups',async()=>{ await FB.fs.doc('cqfill/all').delete(); await upd('cq/board',{fill:null}); }),
+    btn('Clear tasker check-offs',async()=>{ await FB.fs.doc('tkdone/all').delete(); await mutDoc('taskers/board',b=>{ b.status={}; return b; }); }),
+    btn('Clear the SDO schedule',()=>mutDoc('sdo/schedule',d=>{ d.days={}; d.notes={}; return d; })),
+    btn('Clear supervisor pairings',()=>mutDoc('life/pairings',d=>{ d.rows=[]; return d; })),
+    h('span',{class:'small muted'},'New taskers, CQ weeks and the weekly outlook are pasted in on the Sq Staff tabs as usual.'));
+}
+
+/* ---------- UMD paste: replace the roster from the Excel UMD ---------- */
+const UMD_COLS=[['pos',/^(duty\s*)?(position|title|pos|duty|job)/i],['cls',/^(class|cls|yog|grad)/i],['rank',/^(rank|grade)/i],['name',/^(full\s*)?name$/i],['last',/^last/i],['first',/^first/i],['flight',/^(home\s*)?(flight|flt|sq\/flt)/i],['phone',/^(phone|cell|mobile)/i],['email',/^(e-?mail)/i]];
+function parseUmd(text){
+  const rows=parseTSV(text).filter(r=>r.some(c=>c));
+  let map=null, hi=-1;
+  for(let i=0;i<Math.min(rows.length,8);i++){ const m={}; rows[i].forEach((c,j)=>{ const hit=UMD_COLS.find(([k,re])=>re.test(c)&&m[k]===undefined); if(hit) m[hit[0]]=j; }); if((m.name!==undefined||m.last!==undefined)&&Object.keys(m).length>=2){ map=m; hi=i; break; } }
+  if(!map) map={pos:0,cls:1,rank:2,name:3,flight:4};
+  const sections=[]; let sec=null; const skipped=[];
+  rows.slice(hi+1).forEach(r=>{ const filled=r.filter(c=>c); const g=k=>map[k]===undefined?'':(r[map[k]]||'').trim();
+    let name=g('name'); if(!name&&(g('first')||g('last'))) name=(g('first')+' '+g('last')).trim();
+    else if(/,/.test(name)){ const [l,f]=name.split(',').map(x=>x.trim()); if(l&&f) name=f+' '+l; }
+    if(filled.length===1||(!name&&filled.length<=2)){ sec={name:filled[0],people:[]}; sections.push(sec); return; }
+    if(!name){ skipped.push(filled.join(' | ')); return; }
+    if(!sec){ sec={name:'Squadron',people:[]}; sections.push(sec); }
+    sec.people.push({pos:g('pos'),cls:g('cls').toUpperCase().replace(/\s/g,''),rank:g('rank'),name,flight:g('flight'),phone:g('phone'),email:g('email')}); });
+  return {sections:sections.filter(s=>s.people.length),skipped,header:hi>=0};
+}
+// the site finds people's jobs by these names; warn if the new UMD would leave one of them empty
+const UMD_CHECKS=[['A Squadron Command Staff section',r=>r.sections.some(s=>/Command Staff/.test(s.name))],['Squadron Commander',r=>hasPos(r,/^Squadron Commander$/)],['Chief of Staff',r=>hasPos(r,/Chief of Staff/)],['SEL (Senior Enlisted Leader)',r=>hasPos(r,/Senior Enlisted Leader/)],['Exec',r=>hasPos(r,/Executive/)],['First Sergeant',r=>hasPos(r,/First Sergeant/)],['Staff Superintendent',r=>hasPos(r,/Superintendent/)],['Flight sections (e.g. “Alpha Flight”)',r=>r.sections.some(s=>flightRe(true).test(s.name))],['A-staff division chiefs (e.g. “Squadron A1 Division Chief”)',r=>hasPos(r,/^Squadron A(1|2|3|4\/A?6)\b/)]];
+const hasPos=(r,re)=>r.sections.some(s=>s.people.some(p=>re.test(p.pos||'')));
+function umdPastePanel(){
+  const st=S.edit.umdPaste||(S.edit.umdPaste={text:''});
+  const cur=D('roster/main')||{sections:[]};
+  const parsed=st.text.trim()?translateRoster(parseUmd(st.text)):null;
+  let preview=null;
+  if(parsed){ const n=parsed.sections.reduce((a,s)=>a+s.people.length,0);
+    const oldNames=new Set(allPeople().map(p=>norm(p.name))), newNames=new Set(parsed.sections.flatMap(s=>s.people.map(p=>norm(p.name))));
+    const added=[...newNames].filter(x=>!oldNames.has(x)).length, gone=[...oldNames].filter(x=>!newNames.has(x)).length;
+    const checks=UMD_CHECKS.map(([l,f])=>[l,f(parsed)]);
+    preview=h('div',{class:'stack',style:'margin-top:10px'},
+      h('div',{class:'small'},h('b',null,`${n} people in ${parsed.sections.length} sections`),` · ${added} new · ${gone} no longer listed`,parsed.header?'':' · no header row found, so columns were read as Position, Class, Rank, Name, Flight'),
+      parsed.skipped.length?h('div',{class:'small muted'},`Skipped ${parsed.skipped.length} row(s) with no name.`):null,
+      h('ul',{class:'small',style:'margin:0;padding-left:18px'},checks.map(([l,ok])=>h('li',{style:ok?'':'color:var(--coral);font-weight:700'},(ok?'✓ ':'✗ Missing: ')+l))),
+      checks.some(c=>!c[1])?h('div',{class:'banner warn small'},'Missing jobs mean some tabs won’t find their owner (for example the Sq Staff tab looks for the “Squadron Command Staff” section and the job titles above). If the UMD just calls it something different, add a translation in Admin → Site settings, then paste again. You can also replace anyway and fix the roster afterwards.'):null,
+      h('div',{class:'tw',style:'max-height:260px'},h('table',{class:'t'},h('tbody',null,parsed.sections.map(s=>[h('tr',{class:'grp'},h('td',{colspan:5},s.name+' ('+s.people.length+')')),...s.people.slice(0,4).map(p=>h('tr',null,h('td',null,p.pos),h('td',null,p.cls),h('td',null,p.rank),h('td',null,p.name),h('td',null,p.flight)))])))),
+      h('div',{class:'row'},h('label',{class:'f',style:'max-width:260px'},'Unit Commander (shown on the roster)',h('input',{type:'text',value:st.cc!=null?st.cc:(cur.unitCC||''),oninput:e=>st.cc=e.target.value})),
+        confirmBtn('Replace the roster',async()=>{
+          const sections=parsed.sections.map(s=>({name:s.name,people:s.people.map(({phone,email,...p})=>p)}));
+          const ok=await mutDoc('roster/main',r=>({...r,sections,unitCC:st.cc!=null?st.cc:(r.unitCC||''),replaced:new Date().toISOString(),replacedBy:whoAmI()}));
+          if(!ok) return;
+          const contacts={}; parsed.sections.forEach(s=>s.people.forEach(p=>{ if(p.phone||p.email) contacts[p.name]={phone:p.phone||'',email:p.email||''}; }));
+          if(Object.keys(contacts).length) await upd('staff/contacts',{byName:contacts});
+          await markStep('umd',true); S.edit.umdPaste=null; toast('Roster replaced'); render(); },'btn pri')));
+  }
+  return h('div',null,h('textarea',{rows:5,placeholder:'Paste the UMD here (copy the cells in Excel, then paste)',value:st.text,oninput:e=>{ st.text=e.target.value; },onchange:()=>render()}),
+    h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn sm',onclick:()=>render()},'Preview'),h('span',{class:'small muted'},'Reads a header row if there is one (Position, Class, Rank, Name or Last/First, Flight, Phone, Email). A row with a single filled cell starts a new section.')),preview);
+}
+
+/* ---------- staff access follows the UMD ---------- */
+function staffSuggestPanel(){
+  watchMembers(); const all=FB.members||[];
+  const roster=allPeople(); if(!roster.length) return emptyState('Load the UMD first.');
+  const cmd=roster.filter(p=>/Command Staff/.test(p.section||''));
+  const memberFor=name=>all.find(m=>sameName(m.name||'',name))||all.find(m=>sameName(emailToName(m.id),name));
+  const want=new Map(); cmd.forEach(p=>{ const m=memberFor(p.name); want.set(p.name,{p,m}); });
+  const rows=[...want.values()];
+  const extra=all.filter(m=>m.role==='staff'&&!rows.some(r=>r.m&&r.m.id===m.id));
+  const changes=[...rows.filter(r=>r.m&&r.m.role==='member').map(r=>({m:r.m,to:'staff',why:r.p.pos})),...extra.map(m=>({m,to:'member',why:'not in Command Staff on the new UMD'}))];
+  const st=S.edit.staffSug||(S.edit.staffSug={skip:{}});
+  return h('div',null,
+    h('div',{class:'tw'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Command staff on the UMD'),h('th',null,'Job'),h('th',null,'Access list'))),
+      h('tbody',null,rows.map(({p,m})=>h('tr',null,h('td',null,h('b',null,p.name)),h('td',{class:'small'},p.pos),h('td',{class:'small'},m?[h('span',{class:'mono'},m.id),' · ',m.role]:h('span',{style:'color:var(--coral)'},'not on the access list: add them in People & access'))))))),
+    changes.length?h('div',{style:'margin-top:10px'},h('h4',null,'Changes to make'),
+      h('ul',{class:'list'},changes.map(c=>h('li',null,h('input',{type:'checkbox',checked:!st.skip[c.m.id],onchange:e=>{ st.skip[c.m.id]=!e.target.checked; }}),h('div',{class:'grow'},h('b',null,c.m.name||c.m.id),' → ',c.to,h('div',{class:'small muted'},c.why))))),
+      h('button',{class:'btn pri',onclick:async()=>{ const todo=changes.filter(c=>!st.skip[c.m.id]); try{ const b=FB.fs.batch(); todo.forEach(c=>b.set(FB.fs.doc('members/'+c.m.id),{role:c.to},{merge:true})); await b.commit(); await markStep('staff',true); toast(`Updated ${todo.length}`); }catch(e){ toast('Only staff can change access.'); } }},'Apply checked changes')):h('p',{class:'small muted',style:'margin-top:8px'},'Staff access already matches the UMD. Admins are never changed here.'));
+}
+
+/* ---------- site settings: things that change over the years, editable without code ---------- */
+// When a future UMD names a section or job differently, an admin maps it to the name the site expects, here, instead of editing code.
+const CANON_SECTIONS=()=>['Squadron Command Staff','Squadron A-Staff','Squadron Stan/Eval','Squadron Special Staff','Group/Wing Staff',...flightNames().map(f=>f+' Flight')];
+const CANON_JOBS=['Squadron Commander','Squadron Chief of Staff','Squadron Senior Enlisted Leader','Squadron Executive','Squadron Staff Superintendent','Squadron First Sergeant','Flight Commander','Assistant Flight Commander','Flight Chief','Squadron A1 Division Chief','Squadron A2 Division Chief','Squadron A3 Division Chief','Squadron A4/A6 Division Chief','Squadron A1 Staff','Squadron A2 Staff','Squadron A3 Staff','Squadron A4/A6 Staff','Squadron Standardization/Evaluation Officer','Squadron Standardization/Evaluation Staff','Squadron Director of Character and Honor'];
+function translator(){ const tr=(siteSettings().rename||[]).filter(x=>x&&x.from&&x.to); if(!tr.length) return null; const m=new Map(tr.map(x=>[norm(x.from),x.to])); return v=>m.get(norm(v))||v; }
+function translateRoster(r){ const t=translator(); if(!t||!r) return r; return {...r,sections:r.sections.map(s=>({...s,name:t(s.name),people:s.people.map(p=>({...p,pos:t(p.pos||'')}))}))}; }
+S.overlay=S.overlay||{}; let _trMemo=null;
+S.overlay['roster/main']=doc=>{ const set=D('config/settings'); if(!set||!(set.rename||[]).length) return doc; if(_trMemo&&_trMemo.doc===doc&&_trMemo.set===set) return _trMemo.out; const out=translateRoster(doc); _trMemo={doc,set,out}; return out; };
+function settingsView(){
+  const admin=!!S.isOwner; const cur=siteSettings();
+  const st=S.edit.settings||(S.edit.settings={flights:cur.flights||flightNames().join(', '),rename:JSON.parse(JSON.stringify(cur.rename||[])),thanks:(cur.oconus||{}).thanks||'',winter:(cur.oconus||{}).winter||''});
+  const roster=D('roster/main')||{sections:[]};
+  const checks=UMD_CHECKS.map(([l,f])=>[l,f(roster)]);
+  const save=async()=>{ const rename=st.rename.filter(x=>x.from.trim()&&x.to.trim()).map(x=>({from:x.from.trim(),to:x.to.trim()}));
+    if(await mutDoc('config/settings',d=>({...d,flights:st.flights.trim(),rename,oconus:{thanks:st.thanks,winter:st.winter},updated:new Date().toISOString(),updatedBy:whoAmI()}))){ S.edit.settings=null; toast('Settings saved'); render(); } };
+  const dis=!admin||null;
+  const allNames=[...new Set([...(roster.sections||[]).map(s=>s.name),...allPeople().map(p=>p.pos).filter(Boolean)])].sort();
+  return h('div',{class:'stack'},
+    !admin?h('div',{class:'banner info small'},'Only a site admin can change these.'):null,
+    h('div',{class:'panel'},h('h3',null,'Does the site recognize the current UMD?'),
+      h('ul',{class:'small',style:'margin:6px 0;padding-left:18px'},checks.map(([l,ok])=>h('li',{style:ok?'':'color:var(--coral);font-weight:700'},(ok?'✓ ':'✗ Not found: ')+l))),
+      checks.some(c=>!c[1])?h('p',{class:'small'},'Something marked ✗ usually means the UMD calls it something different now. Add a translation below so the site reads it correctly. No code changes needed.'):h('p',{class:'small muted'},'All good.')),
+    h('div',{class:'panel'},h('h3',null,'UMD name translations'),
+      h('p',{class:'small muted',style:'margin:0 0 8px'},'Left: the section or job exactly as the UMD writes it. Right: what the site should treat it as. Example: “Sq/CC” → Squadron Commander, or “Command Section” → Squadron Command Staff.'),
+      h('datalist',{id:'canon'},[...CANON_SECTIONS(),...CANON_JOBS].map(n=>h('option',{value:n}))),
+      h('datalist',{id:'umdnames'},allNames.map(n=>h('option',{value:n}))),
+      st.rename.length?h('div',{class:'stack',style:'gap:6px'},st.rename.map((r,i)=>h('div',{class:'row'},
+        h('input',{type:'text',list:'umdnames',placeholder:'As written on the UMD',value:r.from,disabled:dis,style:'flex:1;min-width:160px',oninput:e=>r.from=e.target.value}),h('span',null,'→'),
+        h('input',{type:'text',list:'canon',placeholder:'What the site expects',value:r.to,disabled:dis,style:'flex:1;min-width:160px',oninput:e=>r.to=e.target.value}),
+        admin?h('button',{class:'btn sm',onclick:()=>{ st.rename.splice(i,1); render(); }},'Remove'):null))):h('p',{class:'small muted'},'No translations. The UMD uses the names the site expects.'),
+      admin?h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>{ st.rename.push({from:'',to:''}); render(); }},'Add a translation'):null),
+    h('div',{class:'panel'},h('h3',null,'Flights'),h('p',{class:'small muted',style:'margin:0 0 8px'},'The squadron’s flight names, separated by commas. Each roster section named “<name> Flight” is a flight.'),
+      h('input',{type:'text',value:st.flights,disabled:dis,oninput:e=>st.flights=e.target.value})),
+    h('div',{class:'panel'},h('h3',null,'OCONUS package deadlines'),h('p',{class:'small muted',style:'margin:0 0 8px'},'Update these each fall when the Group publishes them. Left blank, last year’s dates roll forward.'),
+      h('div',{class:'fgrid'},h('label',{class:'f'},'Thanksgiving Break',h('input',{type:'date',value:st.thanks,disabled:dis,oninput:e=>st.thanks=e.target.value})),h('label',{class:'f'},'Winter Break',h('input',{type:'date',value:st.winter,disabled:dis,oninput:e=>st.winter=e.target.value})))),
+    admin?h('div',{class:'row'},h('button',{class:'btn pri',onclick:save},'Save settings'),h('button',{class:'btn',onclick:()=>{ S.edit.settings=null; render(); }},'Undo changes'),cur.updated?h('span',{class:'small muted'},`Last saved by ${cur.updatedBy||'admin'} on ${fmtShort(cur.updated.slice(0,10))}`):null):null);
+}
+
+/* ---------- self-test: plain-language checks with the fix for each ---------- */
+async function selfTest(){
+  const out=[]; const t=async(label,fn,fix)=>{ try{ const r=await fn(); out.push([label,r!==false,r===false?fix:'']); }catch(e){ console.warn(label,e); out.push([label,false,fix]); } };
+  const em=FB.user.email.toLowerCase();
+  await t('Your account is on the access list',async()=>(await FB.fs.doc('members/'+em).get()).exists,'Sign out and in again. If it still fails, check Admin → People & access.');
+  await t('Squadron records load',async()=>(await S.db.doc('roster/main').get()).exists,'The roster is missing: Admin → Backups → Restore, tick “roster”.');
+  await t('Staff can save',async()=>{ await S.db.doc('staff/meta').update({selftest:new Date().toISOString()}); },'Saving is blocked. Check your access is staff or admin; if it is, re-publish the security rules (see below).');
+  await t('Security rules are the current version',async()=>{ await S.db.doc('continuity/_selftest').set({pos:'self-test',notes:''}); await S.db.doc('continuity/_selftest').delete(); },'Open firestore.rules on GitHub, copy all of it, paste it into Firebase → Firestore Database → Rules, and click Publish.');
+  await t('You’re on the official web address',async()=>!offHost(),'Only use '+OFFICIAL_HOST+'.');
+  const all=FB.members||[]; const admins=all.filter(m=>m.role==='admin');
+  await t('At least two admins, from two classes',async()=>admins.length>=2&&new Set(admins.map(m=>classOfEmail(m.id)||m.id)).size>=2,'Admin → People & access: make someone from a younger class an admin.');
+  const m=D('staff/meta')||{};
+  await t('A backup from the last 30 days',async()=>!!m.lastBackup&&daysSince(m.lastBackup)<=30,'Admin → Backups → Download a backup.');
+  return out;
+}
+
+/* ---------- backups ---------- */
+const BACKUP_COLS=['config','roster','staff','sdo','life','grids','taskers','cq','signoff','recall','allcall','week','cqfill','tkdone','a46','dirt','photos','headsup','signout','ldrtasks','actions','discipline','members','continuity'];
+const RESTORABLE=new Set(BACKUP_COLS.concat(['photofull']));
+const toPlain=v=>{ if(v&&typeof v.toDate==='function') return {__ts:v.toDate().toISOString()}; if(Array.isArray(v)) return v.map(toPlain); if(v&&typeof v==='object'){ const o={}; for(const k in v) o[k]=toPlain(v[k]); return o; } return v; };
+const fromPlain=v=>{ if(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===1&&typeof v.__ts==='string') return firebase.firestore.Timestamp?firebase.firestore.Timestamp.fromDate(new Date(v.__ts)):v.__ts; if(Array.isArray(v)) return v.map(fromPlain); if(v&&typeof v==='object'){ const o={}; for(const k in v) o[k]=fromPlain(v[k]); return o; } return v; };
+async function makeBackup(withPhotos){
+  const out={app:'CS12 One Stop Shop',version:2,project:PROJECT_ID,made:new Date().toISOString(),by:FB.user.email,docs:{}}; const fails=[];
+  for(const c of BACKUP_COLS.concat(withPhotos?['photofull']:[])){ try{ const qs=await FB.fs.collection(c).get(); qs.docs.forEach(d=>{ out.docs[c+'/'+d.id]=toPlain(d.data()); }); }catch(e){ fails.push(c); } }
+  const n=Object.keys(out.docs).length; const stamp=today().replace(/-/g,'');
+  const r=await S.downloads.save({filename:`CS12 hub backup ${stamp}.json`,data:new Blob([JSON.stringify(out)],{type:'application/json'})});
+  if(r&&r.status==='saved'){ await upd('staff/meta',{lastBackup:new Date().toISOString(),lastBackupBy:whoAmI(),lastBackupCount:n}); toast(`Backup saved (${n} records)`+(fails.length?` · couldn’t read ${fails.join(', ')}`:'')); return true; }
+  return false;
+}
+function backupButton(){ return h('div',{class:'row'},h('button',{class:'btn pri',onclick:async()=>{ if(await makeBackup(false)) markStep('backup',true); }},'Download a backup'),h('span',{class:'small muted'},(()=>{ const m=D('staff/meta')||{}; return m.lastBackup?`Last: ${fmtShort(m.lastBackup.slice(0,10))} by ${m.lastBackupBy||'staff'}`:'No backup yet'; })())); }
+async function restoreBackup(data,only){
+  const docs=data&&data.docs; if(!docs||typeof docs!=='object') throw new Error('That isn’t a CS-12 hub backup file.');
+  let b=FB.fs.batch(), k=0, n=0;
+  for(const path of Object.keys(docs)){ const parts=path.split('/'); if(parts.length!==2||!RESTORABLE.has(parts[0])||!/^[\w.@+-]{1,200}$/.test(parts[1])) continue; if(only&&!only.has(parts[0])) continue;
+    const raw=fromPlain(docs[path]); let out=raw;
+    if(typeof raw.j==='string'){ out={j:raw.j,by:FB.user.uid,own:raw.own===undefined?null:raw.own,at:firebase.firestore.FieldValue.serverTimestamp()}; if(typeof raw.k==='string') out.k=raw.k; }
+    b.set(FB.fs.doc(path),out); n++; if(++k>=200){ await b.commit(); b=FB.fs.batch(); k=0; } }
+  if(k) await b.commit(); return n;
+}
+function backupView(){
+  const admin=!!S.isOwner; const m=D('staff/meta')||{}; const st=S.edit.restore||(S.edit.restore={});
+  const groups=st.data?Object.entries(Object.keys(st.data.docs||{}).reduce((a,p)=>{ const c=p.split('/')[0]; a[c]=(a[c]||0)+1; return a; },{})).sort():[];
+  return h('div',{class:'grid2',style:'align-items:start'},
+    h('div',{class:'panel'},h('h3',null,'Download a backup'),
+      h('p',{class:'small muted'},'One file with every squadron record: roster, schedules, taskers, eSSS tracker, posts, A4/6 (still encrypted with its passcode), the access list and the continuity book. Personal paperwork drafts stay on each person’s own account and aren’t included.'),
+      h('p',{class:'small'},h('b',null,'Do this: '),'monthly, before each turnover, and before any big change. Save it to the squadron’s private Teams files. It contains emails and the door code, so never put it on GitHub or email it around.'),
+      backupButton(),
+      h('details',{class:'box',style:'margin-top:10px'},h('summary',null,'Include full-size photos (much bigger file)'),h('button',{class:'btn sm',style:'margin-top:8px',onclick:()=>makeBackup(true)},'Download with photos'))),
+    h('div',{class:'panel'},h('h3',null,'Restore from a backup'),
+      admin?[h('p',{class:'small muted'},'Puts records from a backup file back. Records in the file replace the ones with the same name; anything added since the backup is kept. Use this after a mistake, or to move the whole site to a new Firebase project.'),
+        h('input',{type:'file',accept:'application/json,.json',onchange:async e=>{ const f=e.target.files[0]; if(!f) return; try{ const d=JSON.parse(await f.text()); if(!d||!d.docs) throw new Error('not a backup'); st.data=d; st.pick={}; render(); }catch(x){ toast('That isn’t a CS-12 hub backup file.'); } }}),
+        st.data?h('div',{class:'stack',style:'margin-top:10px'},h('div',{class:'small'},h('b',null,'Backup from '+fmtShort((st.data.made||'').slice(0,10))),` by ${st.data.by||'?'} · ${Object.keys(st.data.docs).length} records`),
+          h('div',{class:'small muted'},'Tick what to put back (nothing ticked = everything):'),
+          h('div',{class:'row',style:'flex-wrap:wrap;gap:10px'},groups.map(([c,n])=>h('label',{class:'small',style:'display:flex;gap:4px;align-items:center'},h('input',{type:'checkbox',checked:!!st.pick[c],onchange:e=>{ st.pick[c]=e.target.checked; }}),`${c} (${n})`))),
+          confirmBtn('Restore',async()=>{ const only=Object.keys(st.pick).filter(k=>st.pick[k]); try{ const n=await restoreBackup(st.data,only.length?new Set(only):null); toast(`Restored ${n} records`); S.edit.restore=null; render(); }catch(x){ console.error(x); toast('Restore stopped: '+(x.message||x)); } },'btn pri')):null]
+      :h('p',{class:'small muted'},'Only a site admin can restore a backup.')));
+}
+
+/* ---------- site health + handbook ---------- */
+function healthView(){
+  watchMembers(); const all=FB.members||[]; const m=D('staff/meta')||{};
+  const kpis=h('div',{class:'kpis'},kpi('People with access',String(all.length)),kpi('Staff',String(all.filter(x=>x.role==='staff').length)),kpi('Admins',String(all.filter(x=>x.role==='admin').length),'',all.filter(x=>x.role==='admin').length<2),
+    kpi('Last backup',m.lastBackup?fmtShort(m.lastBackup.slice(0,10)):'never','',!m.lastBackup||daysSince(m.lastBackup)>30),kpi('This visit',`~${FB.reads||0}`,'records downloaded'));
+  const sec=(t,...kids)=>h('details',{class:'box'},h('summary',null,t),h('div',{class:'small',style:'margin-top:8px'},...kids));
+  const ol=(...l)=>h('ol',{style:'margin:6px 0;padding-left:20px'},l.map(x=>h('li',null,x)));
+  const a=(href,t)=>h('a',{href,target:'_blank',rel:'noopener'},t);
+  const stt=S.edit.selftest||(S.edit.selftest={});
+  return h('div',{class:'stack'},
+    h('div',{class:'panel'},h('div',{class:'row'},h('h3',{style:'margin:0'},'Site health'),h('span',{class:'spacer'}),h('span',{class:'small muted'},'Site version '+(window.CS12_VERSION||'?'))),kpis,
+      h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn pri',onclick:async()=>{ stt.res=await selfTest(); stt.at=new Date().toLocaleString(); render(); }},'Run a self-test'),h('span',{class:'small muted'},'Checks sign-in, saving, the security rules, admins and backups, and says how to fix anything that fails. Run it after every update.')),
+      stt.res?h('ul',{class:'list',style:'margin-top:8px'},stt.res.map(([l,ok,fix])=>h('li',null,h('span',{class:'chip '+(ok?'Approved':'Returned')},ok?'OK':'Fix'),h('div',{class:'grow'},h('b',null,l),fix?h('div',{class:'small'},fix):null)))):null,
+      h('p',{class:'small muted',style:'margin:8px 0 0'},'The free Firebase plan allows about 50,000 record downloads and 20,000 saves a day. Check real usage at ',a(CONSOLE('/firestore/usage'),'Firebase → Firestore → Usage'),'. If a day ever runs out, the site shows the last saved copy until it resets overnight.'),
+      h('div',{style:'margin-top:10px'},adminHealth())),
+    h('div',{class:'panel'},h('h3',null,'Handbook for whoever runs this next'),
+      sec('How the site is put together',
+        h('p',null,h('b',null,'The web address and files'),' live on GitHub (',a('https://github.com/'+GH_ORG,'github.com/'+GH_ORG),'): index.html is the whole site, config.js connects it to Firebase, firestore.rules is the security rulebook, and the PDF templates and logo sit beside them.'),
+        h('p',null,h('b',null,'The data and sign-in'),' live in the Firebase project ',h('code',null,PROJECT_ID||'(see config.js)'),' (',a(CONSOLE(''),'console'),'), on the free plan.'),
+        h('p',null,h('b',null,'Who runs it'),' is decided on the access list (Admin → People & access), not by anyone’s personal account. Admins run the site, staff edit squadron records, members use it. Firebase and GitHub owners are listed in step 10 of New semester.')),
+      sec('Every semester (or when command staff rotates)',ol('Admin → New semester → Start a new checklist.','Work through the 10 steps. Step 1 (backup) first, always.','Outgoing staff: update your page in Squadron Info → Continuity book before you leave the job.')),
+      sec('Day to day (no code needed)',h('ul',{style:'margin:6px 0;padding-left:18px'},
+        h('li',null,'Weekly outlook: Sq Staff → Exec (paste from Excel).'),h('li',null,'SDO and CQ: Duty tab / Sq Staff → Staff Supt (paste from Excel).'),
+        h('li',null,'Roster: Roster tab (edit a row) or New semester step 2 (paste the whole UMD).'),h('li',null,'A-staff weekly pattern: Sq Staff → Chief of Staff.'),
+        h('li',null,'Leadership contacts and links: Squadron Info → Edit.'),h('li',null,'Who can get in: Admin → People & access.'))),
+      sec('If something goes wrong',h('ul',{style:'margin:6px 0;padding-left:18px'},
+        h('li',null,h('b',null,'Someone deleted or broke something: '),'Admin → Backups → Restore, tick just that area, restore.'),
+        h('li',null,h('b',null,'Nobody is an admin any more: '),'a Firebase owner opens ',a(CONSOLE('/firestore/databases/-default-/data/~2Fmembers'),'Firestore → members'),', picks a person’s email and sets role to admin.'),
+        h('li',null,h('b',null,'Nobody can open the Firebase project: '),'make a new free Firebase project, turn on Email/Password sign-in and Firestore, paste its settings into config.js on GitHub, publish firestore.rules, add yourself in Firestore → members with role admin, sign in, and restore the latest backup.'),
+        h('li',null,h('b',null,'“Used today’s free allowance” banner: '),'nothing is lost; it resets overnight. If it happens often, an admin can move the project to the Blaze plan with a small budget alert (the free allowance stays free).'),
+        h('li',null,h('b',null,'Lost A4/6 passcode: '),'the A4/6 data can’t be decrypted. Restore can’t help either. Hand the passcode over in person every turnover.'))),
+      sec('What changes over the years, and where to change it (no code)',h('ul',{style:'margin:6px 0;padding-left:18px'},
+        h('li',null,'Class years and class colors roll over by themselves every June.'),
+        h('li',null,'A new UMD that names jobs or sections differently: Admin → Site settings → UMD name translations.'),
+        h('li',null,'Flight names, OCONUS package deadlines: Admin → Site settings.'),
+        h('li',null,'Leadership, phone numbers, links: Squadron Info → Edit. A4/6 rates, caps and POCs: A4/6 → Settings.'))),
+      sec('Updating the site’s file, and undoing an update',
+        h('p',null,'Everything the site does is in one file, index.html, on GitHub. MAINTAINING.md on GitHub walks through each of these with screenshots-level detail:'),
+        h('ul',{style:'margin:6px 0;padding-left:18px'},
+          h('li',null,h('b',null,'Upload a new version: '),'GitHub → the repository → Add file → Upload files → drop in index.html → Commit changes. The site updates within a few minutes. Then run the self-test above.'),
+          h('li',null,h('b',null,'Undo a bad update: '),'GitHub → click index.html → History → open the last version that worked → “…” → View file → Raw → save it as index.html → upload it. Every version ever uploaded is kept.'),
+          h('li',null,h('b',null,'Undo a rules change: '),'Firebase → Firestore Database → Rules: the list on the left is every published version; pick the last good one and publish it.'),
+          h('li',null,h('b',null,'Fix a typo: '),'GitHub → index.html → the pencil icon → Ctrl+F to find the words → edit → Commit changes.'))),
+      sec('What it costs',h('p',null,'Nothing. GitHub Pages and the Firebase Spark plan are free, and no paid tools or subscriptions are needed to run, update or hand over the site.'))));
+}
+
+/* ---------- continuity book (Squadron Info): one page per job, kept when people change ---------- */
+COLS.continuity={path:'continuity',newest:300};
+S._c.continuity=[]; Object.defineProperty(S,'continuity',{get(){ noteUse('c:continuity'); listenCol('continuity'); return S._c.continuity; },set(v){ S._c.continuity=v; },configurable:true});
+COL_SHAPES.continuity={pos:'',notes:'',by:'',updated:''};
+const posSlug=p=>'p_'+norm(p).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+const BOOK_PROMPT='What this job does each week:\n\nKey dates and suspenses:\n\nWho you work with (and how to reach them):\n\nWhere the files live:\n\nWhat I wish I’d known on day one:\n';
+function continuityView(){
+  const book=S.continuity||[]; const byId=new Map(book.map(x=>[x.id,x]));
+  const me=identify&&identify(); const st=S.edit.book||(S.edit.book={q:''});
+  const secs=(D('roster/main')||{sections:[]}).sections.map(s=>({name:s.name,pos:[...new Set(s.people.map(p=>(p.pos||'').trim()).filter(Boolean))]})).filter(s=>s.pos.length);
+  const known=new Set(secs.flatMap(s=>s.pos.map(posSlug)));
+  const orphans=book.filter(x=>!known.has(x.id)&&x.notes);
+  const q=norm(st.q);
+  const item=pos=>{ const id=posSlug(pos); const x=byId.get(id); const holders=allPeople().filter(p=>(p.pos||'').trim()===pos).map(p=>p.name);
+    const editing=st.edit===id; const mine=me&&(me.pos||'').trim()===pos;
+    return h('details',{class:'box',open:editing||mine||null},h('summary',null,h('b',null,pos),holders.length?h('span',{class:'small muted'},' · '+holders.slice(0,3).join(', ')+(holders.length>3?'…':'')):null,x&&x.notes?h('span',{class:'chip Approved',style:'margin-left:6px'},'has notes'):h('span',{class:'chip Drafted',style:'margin-left:6px'},'empty')),
+      editing?h('div',{style:'margin-top:8px'},h('textarea',{rows:12,value:st.text,oninput:e=>st.text=e.target.value}),
+          h('div',{class:'row',style:'margin-top:6px'},h('button',{class:'btn pri sm',onclick:async()=>{ await upd('continuity/'+id,{pos,notes:st.text.slice(0,20000),by:whoAmI(),updated:new Date().toISOString()}); st.edit=null; toast('Saved to the continuity book'); render(); }},'Save'),h('button',{class:'btn sm',onclick:()=>{ st.edit=null; render(); }},'Cancel')))
+        :h('div',{style:'margin-top:8px'},x&&x.notes?h('div',{class:'small',style:'white-space:pre-wrap'},x.notes):h('p',{class:'small muted'},'Nothing written yet.'),
+          x&&x.updated?h('div',{class:'small muted',style:'margin-top:6px'},`Last updated by ${x.by||'someone'} on ${fmtShort(x.updated.slice(0,10))}`):null,
+          h('button',{class:'btn sm',style:'margin-top:6px',onclick:()=>{ st.edit=id; st.text=x&&x.notes?x.notes:BOOK_PROMPT; render(); }},x&&x.notes?'Edit':'Write this page'))); };
+  return h('div',{class:'stack'},
+    h('div',{class:'banner info small'},h('b',null,'One page per job, kept when people change. '),'Before you leave a job, write what the next person needs. When you start one, read your page first.',me&&me.pos?[' Yours: ',h('b',null,me.pos),'.']:null),
+    h('input',{type:'text',placeholder:'Search jobs…',value:st.q,style:'max-width:280px',onchange:e=>{ st.q=e.target.value; render(); }}),
+    secs.map(s=>{ const list=s.pos.filter(p=>!q||norm(p+' '+s.name).includes(q)); return list.length?h('div',null,h('h4',{style:'margin:8px 0 4px'},s.name),list.map(item)):null; }),
+    orphans.length?h('div',null,h('h4',{style:'margin:8px 0 4px'},'Jobs no longer on the UMD'),orphans.map(x=>item(x.pos||x.id))):null);
+}
+/* ---------- staff upkeep: one-time data moves and a daily tidy of the busiest records ---------- */
+async function staffUpkeep(){
+  if(!S.canEdit||staffUpkeep.ran) return; staffUpkeep.ran=true;
+  try{
+    const metaRef=S.db.doc('config/meta'); const ms=await metaRef.get(); const meta=(ms.exists&&ms.data())||{};
+    // 1) tag every eSSS trip with its return date so browsers only download current trips
+    //    (and leader tasks / action items with open or done, so My Squadron only downloads open ones)
+    if(!meta.soK){ for(const c of ['signout','ldrtasks','actions']){ const qs=await FB.fs.collection(c).get(); let b=FB.fs.batch(),k=0;
+        for(const d of qs.docs){ const raw=d.data(); if(typeof raw.k==='string') continue; const o=fbDec(raw); if(!o) continue; b.set(d.ref,fbPack(o,raw.own===undefined?null:raw.own,c+'/'+d.id)); if(++k>=200){ await b.commit(); b=FB.fs.batch(); k=0; } }
+        if(k) await b.commit(); }
+      await metaRef.update({soK:true}); }
+    // 2) move trips from the old paperwork notices into the eSSS tracker, so nobody downloads the old notices just for dates
+    if(!meta.hs2so){ const qs=await FB.fs.collection('headsup').get(); const list=normCol('headsup',qs.docs.map(d=>({id:d.id,...fbDec(d.data())})));
+      let b=FB.fs.batch(),k=0; for(const t of legacyTripsFrom(list)){ const o={name:t.name,kind:t.kind,depart:t.depart,ret:t.ret,where:t.where,unit:unitOf(t.name).label,created:new Date().toISOString(),by:t.by||null,fromNotice:t.id};
+        b.set(FB.fs.doc('signout/so_'+t.id),fbPack(o,null,'signout/x')); if(++k>=200){ await b.commit(); b=FB.fs.batch(); k=0; } }
+      if(k) await b.commit(); await metaRef.update({hs2so:true}); }
+    // 3) once a day: drop CQ sign-ups and tasker check-offs that belong to weeks/taskers no longer on the boards,
+    //    so the two busiest records stay small (every change to them is sent to everyone who has the page open)
+    if(meta.pruned!==today()){ const del=firebase.firestore.FieldValue.delete;
+      const cq=(await S.db.doc('cq/board').get()).data(); const ids=new Set(); ((cq&&cq.weeks)||[]).forEach(w=>((w&&w.rows)||[]).forEach(r=>((r&&r.slots)||[]).forEach(sl=>sl&&sl.id&&ids.add(sl.id))));
+      if(ids.size){ const f=await FB.fs.doc('cqfill/all').get(); const gone=Object.keys((f.exists&&f.data())||{}).filter(k=>!ids.has(k)); if(gone.length) await FB.fs.doc('cqfill/all').update(Object.fromEntries(gone.map(k=>[k,del()]))); }
+      const tb=(await S.db.doc('taskers/board').get()).data(); const cols=new Set(((tb&&tb.columns)||[]).map(c=>c&&c.id)); const ppl=new Set(((tb&&tb.groups)||[]).flatMap(g=>((g&&g.people)||[]).map(p=>p&&p.id)));
+      if(cols.size&&ppl.size){ const f=await FB.fs.doc('tkdone/all').get(); const gone=Object.keys((f.exists&&f.data())||{}).filter(k=>{ const m=/^(.+)__(.+)$/.exec(k); return !m||!ppl.has(m[1])||!cols.has(m[2]); }); if(gone.length) await FB.fs.doc('tkdone/all').update(Object.fromEntries(gone.map(k=>[k,del()]))); }
+      await metaRef.update({pruned:today()}); }
+  }catch(e){ console.warn('upkeep',e); }
+}
 </script>
 <script>
 (function(){

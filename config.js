@@ -8,5 +8,3 @@ window.FIREBASE_CONFIG = {
   messagingSenderId: "1081352412533",
   appId: "1:1081352412533:web:abda9afc34aee9d710873c"
 };
-// The site owner: always has staff access. Must match the email in firestore.rules.
-window.CS12_OWNER = "sophiekent04@gmail.com";

@@ -1,57 +1,176 @@
 rules_version = '2';
-// CS-12 One Stop Shop — paste this whole file into Firebase console → Firestore Database → Rules → Publish.
-// Only approved members can read anything. Staff (and the owner) can edit squadron-wide records.
+// CS-12 One Stop Shop: paste this whole file into Firebase console → Firestore Database → Rules → Publish.
+// Only people on the access list can read anything. Staff edit squadron-wide records; admins also run access and restores.
+// No one's personal email is written in here: who is an admin lives on the access list (members/{email}.role).
+// Members can add their own posts and sign-ups, but can't delete or overwrite anyone else's.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function signedIn() { return request.auth != null && request.auth.token.email != null && request.auth.token.email_verified == true; }
     function em() { return request.auth.token.email.lower(); }
-    function isOwner() { return signedIn() && em() == 'sophiekent04@gmail.com'; }
     function memberDoc() { return /databases/$(database)/documents/members/$(em()); }
-    function isMember() { return isOwner() || (signedIn() && exists(memberDoc())); }
-    function isStaff() { return isOwner() || (isMember() && get(memberDoc()).data.role == 'staff'); }
-    function stamped() { return request.resource.data.by == request.auth.uid; }
+    function isMember() { return signedIn() && exists(memberDoc()); }
+    function myRole() { return get(memberDoc()).data.role; }
+    function isStaff() { return isMember() && myRole() in ['staff', 'admin']; }
+    function isAdmin() { return isMember() && myRole() == 'admin'; }
+    function uid() { return request.auth.uid; }
 
-    // Who can sign in
+    // Every record the site saves looks like {j: text, by: uid, own: creator uid or null, at: time}
+    function wellFormed() {
+      return request.resource.data.keys().hasOnly(['j', 'by', 'own', 'at', 'k'])
+        && (!('k' in request.resource.data) || (request.resource.data.k is string && request.resource.data.k.size() <= 10))
+        && request.resource.data.j is string && request.resource.data.j.size() < 950000
+        && request.resource.data.by == uid();
+    }
+    function creatorIsMe() { return request.resource.data.own == uid(); }
+    function keepsCreator() { return request.resource.data.get('own', null) == resource.data.get('own', null); }
+    function iCreatedIt() { return resource.data.get('own', null) == uid(); }
+
+    // ---------- who can sign in ----------
     match /members/{e} {
       allow read: if isStaff() || (signedIn() && e == em());
-      allow write: if isStaff();
+      // staff add members and staff; only an admin can make, change or remove an admin
+      allow create, update: if (request.resource.data.get('name', '') is string) && (
+           (isAdmin() && request.resource.data.role in ['member', 'staff', 'admin'])
+        || (isStaff() && request.resource.data.role in ['member', 'staff'] && (resource == null || resource.data.role != 'admin')));
+      allow delete: if isAdmin() || (isStaff() && resource.data.role != 'admin');
     }
     match /requests/{e} {
-      allow read: if isStaff() || (signedIn() && e == em());
-      allow create, update: if signedIn() && e == em();
-      allow delete: if isStaff() || (signedIn() && e == em());
+      allow read, delete: if isStaff() || (signedIn() && e == em());
+      allow create, update: if signedIn() && e == em() && request.resource.data.keys().hasOnly(['email', 'name', 'uid', 'created']);
     }
 
-    // Staff-only: contacts, door code, notes, A4/6 import
-    match /staff/{d} {
-      allow read, write: if isStaff();
-    }
-    // Form 10 / 174 notices: the cadet who filed it and staff
-    match /discipline/{u} {
-      allow read: if isStaff() || (isMember() && u == request.auth.uid);
-      allow write: if (isStaff() || (isMember() && u == request.auth.uid)) && stamped();
+    // ---------- staff only ----------
+    match /staff/{d} { allow read, write: if isStaff(); }
+
+    // ---------- core squadron records: everyone reads, staff edit ----------
+    match /config/{d}  { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /roster/{d}  { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /sdo/{d}     { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /life/{d}    { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /grids/{d}   { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed());
+                         // Mitch's seating: anyone in the squadron can edit (but not delete) it
+                         allow create, update: if d == 'mitches' && isMember() && wellFormed() && (request.method == 'create' || keepsCreator()); }
+    match /taskers/{d} { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /cq/{d}      { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /signoff/{d} { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /recall/{d}  { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /week/{d}    { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+    match /allcall/{d} { allow read: if isMember(); allow write: if isStaff() && (request.method == 'delete' || wellFormed()); }
+
+    // ---------- CQ sign-ups: one small record, one slot per save ----------
+    // A member may fill an empty slot or change/clear a slot they filled. Staff can change any slot.
+    match /cqfill/{d} {
+      allow read: if isMember();
+      allow create: if isStaff() || (isMember() && d == 'all' && request.resource.data.keys().size() == 1 && slotOK(request.resource.data[request.resource.data.keys()[0]], 60));
+      allow update: if isStaff() || (isMember() && d == 'all' && cqSlotChangeOK());
       allow delete: if isStaff();
     }
-    // My Squadron: private to each person
-    match /data/users/{u}/{d} {
-      allow read, delete: if isMember() && u == request.auth.uid;
-      allow create, update: if isMember() && u == request.auth.uid && stamped();
-    }
-    // Photos: anyone can post, only the poster or staff can remove
-    match /photos/{d} {
+    function slotOK(e, maxLen) { return e.keys().hasOnly(['v', 'by', 'at']) && e.v is string && e.v.size() <= maxLen && e.by == uid(); }
+
+    // ---------- tasker check-offs: one entry per person per tasker ----------
+    // Members can mark a tasker done (or undo their own mark). Staff can change anything.
+    match /tkdone/{d} {
       allow read: if isMember();
-      allow create: if isMember() && stamped();
-      allow update, delete: if isStaff() || (isMember() && resource.data.by == request.auth.uid);
+      allow create: if isStaff() || (isMember() && d == 'all' && request.resource.data.keys().size() == 1 && slotOK(request.resource.data[request.resource.data.keys()[0]], 3));
+      allow update: if isStaff() || (isMember() && d == 'all' && tkChangeOK());
+      allow delete: if isStaff();
+    }
+    function tkChangeOK() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let k = changed.toList()[0];
+      return changed.size() == 1
+        && slotOK(request.resource.data[k], 3)
+        && request.resource.data[k].v in ['Yes', 'No', '']
+        && (!(k in resource.data) || resource.data[k].by == uid() || (request.resource.data[k].v == 'Yes' && resource.data[k].v != 'Yes'));
+      // (undoing a check-off sets it back to 'No'; only the person who checked it, or staff, can undo it)
+    }
+    function cqSlotChangeOK() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let k = changed.toList()[0];
+      return changed.size() == 1
+        && slotOK(request.resource.data[k], 60)
+        && (!(k in resource.data) || resource.data[k].v == '' || resource.data[k].by == uid());
     }
 
-    // Everything else: members read; staff-only edits for the core squadron records
-    match /{c}/{d} {
-      allow read: if isMember() && !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']);
-      allow create, update: if stamped() && !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']) &&
-        (c in ['config', 'roster', 'sdo', 'life', 'grids'] ? isStaff() : isMember());
-      allow delete: if !(c in ['members', 'requests', 'staff', 'discipline', 'data', 'photos']) &&
-        (c in ['config', 'roster', 'sdo', 'life', 'grids'] ? isStaff() : isMember());
+    // ---------- A4/6 vault (encrypted; the passcode protects the contents) ----------
+    match /a46/{d} {
+      allow read: if isMember();
+      allow create, update: if isMember() && wellFormed() && (request.method == 'create' || keepsCreator());
+      allow delete: if isStaff();
     }
+
+    // ---------- things members post: anyone adds, only the poster or staff remove ----------
+    match /dirt/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && wellFormed() && creatorIsMe();
+      allow update, delete: if isStaff() || (isMember() && iCreatedIt() && (request.method == 'delete' || (wellFormed() && keepsCreator())));
+    }
+    match /photos/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && wellFormed() && creatorIsMe();
+      allow update, delete: if isStaff() || (isMember() && iCreatedIt() && (request.method == 'delete' || (wellFormed() && keepsCreator())));
+    }
+    match /photofull/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.own == uid() && request.resource.data.d is string && request.resource.data.d.size() < 950000
+        && request.resource.data.d.matches('^data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$');
+      allow delete: if isStaff() || (isMember() && resource.data.own == uid());
+    }
+    // paperwork heads-ups: the sender creates; anyone in the squadron can mark a step signed; sender or staff delete
+    match /headsup/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && wellFormed() && creatorIsMe();
+      allow update: if isMember() && wellFormed() && keepsCreator();
+      allow delete: if isStaff() || (isMember() && iCreatedIt());
+    }
+    // eSSS tracker: anyone logs their own trips; staff can log anyone; the person who logged it or staff can change/remove it
+    match /signout/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && wellFormed() && (creatorIsMe() || isStaff());
+      allow update: if isMember() && wellFormed() && (isStaff() || (iCreatedIt() && keepsCreator()));
+      allow delete: if isStaff() || (isMember() && iCreatedIt());
+    }
+    // tasks staff assign to leaders: staff create; the leader can update (mark done); staff delete
+    match /ldrtasks/{d} {
+      allow read: if isMember();
+      allow create, delete: if isStaff();
+      allow update: if isMember() && wellFormed() && keepsCreator();
+    }
+    match /actions/{d} {
+      allow read: if isMember();
+      allow create, delete: if isStaff();
+      allow update: if isMember() && wellFormed() && keepsCreator();
+    }
+
+    // ---------- Form 10 / 174 notices: the cadet who filed it and staff ----------
+    match /discipline/{u} {
+      allow read: if isStaff() || (isMember() && u == uid());
+      allow create, update: if (isStaff() || (isMember() && u == uid())) && wellFormed();
+      allow delete: if isStaff();
+    }
+
+    // ---------- My Squadron: private to each person ----------
+    match /data/users/{u}/{d} {
+      allow read, delete: if isMember() && u == uid();
+      allow create, update: if isMember() && u == uid() && wellFormed();
+    }
+
+    // continuity book: one page per job; anyone in the squadron can write their job's page, staff can delete
+    match /continuity/{d} {
+      allow read: if isMember();
+      allow create: if isMember() && wellFormed() && creatorIsMe();
+      allow update: if isMember() && wellFormed() && keepsCreator();
+      allow delete: if isStaff();
+    }
+
+    // restoring a backup: an admin can put back any squadron record (not personal My Squadron data)
+    match /{c}/{d} {
+      allow create, update: if isAdmin() && c in ['config', 'roster', 'staff', 'sdo', 'life', 'grids', 'taskers', 'cq', 'signoff', 'recall', 'allcall', 'week',
+        'cqfill', 'tkdone', 'a46', 'dirt', 'photos', 'photofull', 'headsup', 'signout', 'ldrtasks', 'actions', 'discipline', 'members', 'continuity'];
+    }
+
+    // anything not listed above is closed
+    match /{path=**} { allow read, write: if false; }
   }
 }
