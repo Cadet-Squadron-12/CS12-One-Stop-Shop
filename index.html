@@ -170,6 +170,9 @@ table.t td.num{font-variant-numeric:tabular-nums;text-align:right}
 button.st{cursor:pointer}
 .st.yes{background:var(--mint-soft);color:var(--mint)}
 .st.no{background:var(--coral-soft);color:var(--coral)}
+.tkrow{padding:0!important}.tkrow.done{background:var(--mint-soft);border-radius:8px}
+.tkhit{display:flex;gap:10px;align-items:center;width:100%;min-height:48px;padding:6px 8px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tkhit input[type=checkbox]{width:24px;height:24px;flex:none;margin:0;accent-color:var(--mint)}
 .st.na{background:var(--sunk);color:var(--muted)}
 .chip{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700}
 .chip.Drafted{background:var(--sunk);color:var(--muted)}
@@ -293,7 +296,7 @@ button.step{cursor:pointer}
 </header>
 <main class="wrap" id="main"><div class="empty">Loading the squadron's data…</div></main>
 <div id="toast" class="toast" hidden></div>
-<script>window.CS12_VERSION='2026-10-31';</script>
+<script>window.CS12_VERSION='2026-11-11';</script>
 <script>
 "use strict";
 /* ---------- tiny DOM helper ---------- */
@@ -459,8 +462,10 @@ async function boot(){
   setTimeout(()=>{S.ready=true;schedule()},4000);
 }
 // redraw only when something the open tab shows has changed (a CQ sign-up doesn't redraw the Roster tab)
-function schedule(key){ if(key&&S._used&&!S._used.has(key)) return; if(schedule.t) return; schedule.t=requestAnimationFrame(()=>{schedule.t=0; const a=document.activeElement; if(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)){S.pending=true;return;} render();}); }
-document.addEventListener('focusout',()=>setTimeout(()=>{ if(S.pending){ const a=document.activeElement; if(!(a&&a.closest&&a.closest('#main')&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){S.pending=false;render();} }},120));
+// hold a redraw only while someone is typing in a box (a tapped checkbox or button must update right away, which matters on phones)
+const typingIn=a=>!!(a&&a.closest&&a.closest('#main')&&(a.tagName==='TEXTAREA'||a.tagName==='SELECT'||(a.tagName==='INPUT'&&!/^(checkbox|radio|button|submit|reset|file|range|color)$/i.test(a.type||''))));
+function schedule(key){ if(key&&S._used&&!S._used.has(key)) return; if(schedule.t) return; schedule.t=requestAnimationFrame(()=>{schedule.t=0; if(typingIn(document.activeElement)){S.pending=true;return;} render();}); }
+document.addEventListener('focusout',()=>setTimeout(()=>{ if(S.pending&&!typingIn(document.activeElement)){S.pending=false;render();} },120));
 
 /* ---------- writes ---------- */
 function dbErr(e){ console.warn(e); const c=e&&e.code; toast(c==='invalid_argument'?'You don’t have permission to change that. Ask the Chief of Staff if you should.':c==='quota_exceeded'?'That’s too big to save. Shorten it or split it up.':c==='offline'||!navigator.onLine?'You’re offline. Reconnect and try again.':c==='resource-exhausted'?'The hub used up today’s free allowance, so that didn’t save. It resets overnight (about 1 AM Mountain).':'That didn’t save. Check your connection and try again.'); }
@@ -1766,25 +1771,48 @@ function tkPersonFor(name){ const tk=D('taskers/board'); if(!tk) return null; co
 function myTaskerList(name){ const tk=D('taskers/board'); const p=tkPersonFor(name); if(!tk||!p) return null;
   return tk.columns.map(c=>({c,pid:p.id,v:(tk.status[p.id]||{})[c.id]||''})).filter(x=>x.v).map(x=>({...x,done:/^yes/i.test(x.v)})); }
 function myTaskers(name){ const l=myTaskerList(name); return l===null?null:l.filter(x=>!x.done); }
-// Flight commanders / flight chiefs and division chiefs see their people
-function leaderScope(name){
-  const me=allPeople().filter(p=>sameName(p.name,name));
-  for(const p of me){
-    if(/Flight$/.test(p.section)&&/^(Flight Commander|Assistant Flight Commander|Flight Chief)$/.test((p.pos||'').trim())){ const sec=D('roster/main').sections.find(s=>s.name===p.section); return {label:p.section,kind:'flight',names:sec.people.map(x=>x.name),group:p.section}; }
-    const m=(p.pos||'').match(/Squadron (A1|A2|A3|A4\/A6) Division Chief/); if(m){ const re=new RegExp('Squadron '+m[1].replace('/','\\/')+' (Staff|Division Chief)'); return {label:m[1]+' division',kind:'div',names:allPeople().filter(x=>re.test(x.pos||'')).map(x=>x.name)}; }
-    if(/Standardization\/Evaluation Officer/.test(p.pos||'')) return {label:'Stan/Eval',kind:'div',names:allPeople().filter(x=>/Standardization/.test(x.pos||'')).map(x=>x.name)};
+// Flight commanders / flight chiefs and division chiefs see their people (someone with two leader jobs sees both)
+function leaderScopes(name){
+  const out=[]; const add=sc=>{ if(!out.some(x=>x.label===sc.label)) out.push(sc); };
+  for(const p of allPeople().filter(p=>sameName(p.name,name))){
+    if(/Flight$/.test(p.section)&&/^(Flight Commander|Assistant Flight Commander|Flight Chief)$/.test((p.pos||'').trim())){ const sec=D('roster/main').sections.find(s=>s.name===p.section); add({label:p.section,kind:'flight',names:sec.people.map(x=>x.name),group:p.section}); }
+    const m=(p.pos||'').match(/Squadron (A1|A2|A3|A4\/A6) Division Chief/); if(m){ const re=new RegExp('Squadron '+m[1].replace('/','\\/')+' (Staff|Division Chief)'); add({label:m[1]+' division',kind:'div',names:allPeople().filter(x=>re.test(x.pos||'')).map(x=>x.name)}); }
+    if(/Standardization\/Evaluation Officer/.test(p.pos||'')) add({label:'Stan/Eval',kind:'div',names:allPeople().filter(x=>/Standardization/.test(x.pos||'')).map(x=>x.name)});
   }
-  return null;
+  return out;
+}
+const leaderScope=name=>leaderScopes(name)[0]||null;
+// tasker status for one leader's people: who's done and who isn't, per tasker (cards on phones, a grid like the staff board on request)
+function leaderTaskers(sc){
+  const tk=D('taskers/board'); if(!tk) return h('p',{class:'muted'},'No tasker board yet.');
+  const inScope=n=>sc.names.some(m=>sameName(m,n));
+  const people=[]; tk.groups.forEach(g=>g.people.forEach(p=>{ if(((sc.group&&g.name===sc.group)||inScope(p.name))&&!people.some(x=>x.id===p.id||norm(x.name)===norm(p.name))) people.push(p); })); // someone listed twice on the board (staff + flight) shows once
+  const val=(p,c)=>(tk.status[p.id]||{})[c.id]||'';
+  const cols=tk.columns.map(c=>{ const done=[],open=[]; people.forEach(p=>{ const v=val(p,c); if(!v) return; (/^yes/i.test(v)?done:open).push(p); }); return {c,done,open,due:tkDue(c)}; }).filter(x=>x.done.length+x.open.length);
+  const key='ldrtk_'+sc.label; const st=S.sub[key]||'cards'; const onlyOpen=S.sub[key+'_open']; const t=today();
+  if(!cols.length) return h('p',{class:'muted'},`No taskers for your ${sc.kind==='flight'?'flight':'division'}.`);
+  const nm=p=>[p.rank,p.name].filter(Boolean).join(' ');
+  const pills=(list,cls)=>h('div',{class:'row',style:'flex-wrap:wrap;gap:4px;margin-top:4px'},list.map(p=>h('span',{class:'st '+cls,style:'font-weight:600'},nm(p))));
+  const toggle=h('div',{class:'row',style:'gap:6px;flex-wrap:wrap'},
+    h('div',{class:'seg',role:'group'},[['cards','By tasker'],['grid','Table']].map(([k,l])=>h('button',{type:'button','aria-pressed':String(st===k),onclick:()=>{ S.sub[key]=k; ls('sub',S.sub); render(); }},l))),
+    h('label',{class:'small',style:'display:flex;gap:4px;align-items:center'},h('input',{type:'checkbox',checked:!!onlyOpen,onchange:e=>{ S.sub[key+'_open']=e.target.checked; render(); }}),'Only not done'));
+  const shown=onlyOpen?cols.filter(x=>x.open.length):cols;
+  const body=st==='grid'
+    ? h('div',{class:'tw',style:'max-height:60vh'},h('table',{class:'t'},h('thead',null,h('tr',null,h('th',null,'Name'),shown.map(x=>h('th',null,x.c.label,h('div',{style:'font-weight:400;text-transform:none'},`${x.done.length}/${x.done.length+x.open.length}`))))),
+        h('tbody',null,people.filter(p=>!onlyOpen||shown.some(x=>x.open.includes(p))).map(p=>h('tr',{class:ycls(tkClassOf(p))||null},h('td',{style:'white-space:nowrap;font-weight:600'},nm(p)),shown.map(x=>{ const v=val(p,x.c); return h('td',null,h('span',{class:'st '+(/^yes/i.test(v)?'yes':v?'no':'na')},/^yes/i.test(v)?'Done':v?'Not done':'—')); }))))))
+    : h('ul',{class:'list'},shown.map(x=>h('li',{style:'display:block'},
+        h('div',{class:'row'},h('b',{class:'grow'},x.c.label),x.due?h('span',{class:'small',style:`color:${x.due<t&&x.open.length?'var(--coral)':'var(--muted)'}`},`due ${fmtShort(x.due)}`):null,h('b',{class:'mono small'},`${x.done.length}/${x.done.length+x.open.length}`)),
+        h('div',{class:'bar',style:'margin:4px 0'},h('i',{style:`width:${100*x.done.length/(x.done.length+x.open.length)}%`})),
+        x.open.length?[h('div',{class:'small',style:'margin-top:4px;color:var(--coral);font-weight:700'},`Not done (${x.open.length})`),pills(x.open,'no')]:h('div',{class:'small',style:'color:var(--mint);font-weight:700'},'Everyone’s done'),
+        !onlyOpen&&x.done.length?[h('div',{class:'small',style:'margin-top:6px;color:var(--mint);font-weight:700'},`Done (${x.done.length})`),pills(x.done,'yes')]:null)));
+  return h('div',{class:'stack',style:'gap:8px'},toggle,body);
 }
 function leaderPanel(name){
-  const sc=leaderScope(name); if(!sc) return null;
-  const inScope=n=>sc.names.some(m=>sameName(m,n)); const tk=D('taskers/board'); const t=today();
-  const rows=[]; if(tk) tk.columns.forEach(c=>{ const miss=[]; let done=0,tot=0; tk.groups.forEach(g=>g.people.forEach(p=>{ if(!(sc.group&&g.name===sc.group)&&!inScope(p.name)) return; const v=(tk.status[p.id]||{})[c.id]||''; if(!v) return; tot++; if(/^yes/i.test(v)) done++; else miss.push(`${p.rank} ${p.name}`); })); if(tot) rows.push({c,miss,done,tot,due:tkDue(c)}); });
-  return h('div',{class:'panel',style:'border:2px solid var(--sun)'},h('h3',null,`Your ${sc.kind==='flight'?'flight':'division'}: ${sc.label}`),h('p',{class:'small muted',style:'margin-top:-4px'},`${sc.names.length} people. Tasker status and who’s leaving on an eSSS from your ${sc.kind==='flight'?'flight':'division'}.`),
+  const scopes=leaderScopes(name); if(!scopes.length) return null;
+  return scopes.map(sc=>h('div',{class:'panel',style:'border:2px solid var(--sun)'},h('h3',null,`Your ${sc.kind==='flight'?'flight':'division'}: ${sc.label}`),h('p',{class:'small muted',style:'margin-top:-4px'},`${sc.names.length} people. Who has and hasn’t finished each tasker, and who’s leaving on an eSSS from your ${sc.kind==='flight'?'flight':'division'}.`),
     h('div',{class:'grid2',style:'align-items:start'},
-      h('div',null,h('h4',null,'Taskers'),rows.length?h('ul',{class:'list'},rows.map(r=>h('li',{style:'align-items:flex-start'},h('div',{class:'grow'},h('b',null,r.c.label),r.due?h('span',{class:'small',style:`color:${r.due<t&&r.miss.length?'var(--coral)':'var(--muted)'}`},` · due ${fmtShort(r.due)}`):null,
-        r.miss.length?h('div',{class:'small muted'},'Not done: '+r.miss.join(', ')):h('div',{class:'small',style:'color:var(--mint)'},'Everyone’s done')),h('b',{class:'mono small'},`${r.done}/${r.tot}`)))):h('p',{class:'muted'},'No taskers for your people.')),
-      leaderOutPanel(sc)));
+      h('div',null,h('h4',null,'Taskers'),leaderTaskers(sc)),
+      leaderOutPanel(sc))));
 }
 const KIND_LABEL={memo:'Memo / MFR',esss:'eSSS',f99:'Form 99',f174:'AF 174',f10:'Form 10',oconus:'OCONUS'};
 function myDraftsPanel(meCol){
@@ -1827,10 +1855,10 @@ VIEWS.me=function(){
         h('ul',{class:'list',style:'margin-top:8px'},
           ldr.map(x=>h('li',null,h('span',{class:'chip Returned'},{cos:'From CoS',sel:'From SEL',cc:'From Sq/CC'}[x.byRole]||'Staff'),h('div',{class:'grow'},x.title,h('div',{class:'small',style:`color:${x.due&&x.due<t?'var(--coral)':'var(--muted)'}`},[x.due?(x.due<t?'was due ':'due ')+fmtShort(x.due):'',x.notes].filter(Boolean).join(' · '))),h('button',{class:'btn sm',onclick:()=>upd('ldrtasks/'+x.id,{status:'Done',doneAt:new Date().toISOString()})},'Mark done'))),
           acts.map(a=>h('li',null,h('span',{class:'chip Sent'},a.staff),h('div',{class:'grow'},a.title,a.due?h('div',{class:'small muted'},'due '+fmtShort(a.due)):null))),
-          tkAll&&tkAll.length?tkAll.map(x=>h('li',null,
+          tkAll&&tkAll.length?tkAll.map(x=>h('li',{class:'tkrow'+(x.done?' done':'')},h('label',{class:'tkhit'},
             h('input',{type:'checkbox',checked:x.done,'aria-label':'Done: '+x.c.label,onchange:e=>{ const v=e.target.checked?'Yes':'No'; if(typeof tkWrite==='function') tkWrite(x.pid,x.c.id,v); else upd('taskers/board',{status:{[x.pid]:{[x.c.id]:v}}}); }}),
-            h('span',{class:'chip '+(x.done?'Approved':'Returned')},'Tasker'),
-            h('div',{class:'grow',style:x.done?'text-decoration:line-through;color:var(--muted)':''},x.c.label,!x.done&&tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):null))):null,
+            h('span',{class:'chip '+(x.done?'Approved':'Returned')},x.done?'✓ Completed':'Tasker'),
+            h('div',{class:'grow',style:x.done?'text-decoration:line-through;color:var(--muted)':''},x.c.label,!x.done&&tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):h('div',{class:'small muted'},x.done?'Tap to undo':'Tap when done'))))):null,
           todos.map(d=>h('li',null,h('input',{type:'checkbox',checked:d.done,onchange:e=>S.db.doc(`${meCol}/${d.id}`).update({done:e.target.checked}).catch(dbErr)}),h('div',{class:'grow',style:d.done?'text-decoration:line-through;color:var(--muted)':''},d.text,d.due?h('div',{class:'small',style:`color:${!d.done&&d.due<t?'var(--coral)':'var(--muted)'}`},'due '+fmtShort(d.due)):null),confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))),
         !acts.length&&!ldr.length&&!(tk&&tk.length)&&!todos.length?h('p',{class:'muted'},'All clear. Staff action items and incomplete taskers with your name show up here too.'):null,
         h('p',{class:'small muted',style:'margin:8px 0 0'},'Your to-dos are private to you.'))),
@@ -3503,8 +3531,11 @@ function fbStartTk(){
 async function tkWrite(pid,cid,v){
   const k=pid+'__'+cid; if(!/^[\w-]{1,40}__[\w-]{1,40}$/.test(k)) return;
   if(!['Yes','No',''].includes(v)) v='';
-  try{ await withRetry(()=>FB.fs.doc('tkdone/all').set({[k]:{v,by:FB.user.uid,at:Date.now()}},{merge:true})); }
-  catch(e){ toast(e&&e.code==='permission-denied'?'Only staff can change someone else’s tasker.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
+  // show the change straight away (green / undone), then save; if the save fails, put it back
+  const had=Object.prototype.hasOwnProperty.call(FB.tk,k), prev=FB.tk[k]; const entry={v,by:FB.user.uid,at:Date.now()};
+  FB.tk={...FB.tk,[k]:entry}; schedule('d:taskers/board'); render();
+  try{ await withRetry(()=>FB.fs.doc('tkdone/all').set({[k]:entry},{merge:true})); }
+  catch(e){ const back={...FB.tk}; if(had) back[k]=prev; else delete back[k]; FB.tk=back; render(); toast(e&&e.code==='permission-denied'?'Only staff can change someone else’s tasker.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
 }
 // one time: move sign-ups that were saved inside the old CQ board into the new per-slot record (staff do this automatically)
 let _cqMig=false;
