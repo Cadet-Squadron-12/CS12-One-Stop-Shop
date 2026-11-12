@@ -3515,7 +3515,7 @@ function fbStartCq(){
 async function cqWrite(id,v){
   if(!/^[\w-]{1,40}$/.test(id)) return;
   const prev=FB.cq[id]; if(prev&&prev.by&&prev.by!==FB.user.uid&&!S.canEdit) return toast('Someone else has that slot. Ask squadron staff to change it.');
-  try{ await withRetry(()=>FB.fs.doc('cqfill/all').set({[id]:{v,by:FB.user.uid,at:Date.now()}},{merge:true})); }
+  try{ await withRetry(()=>FB.fs.doc('cqfill/all').set({[id]:{v,by:FB.user.uid,at:Date.now()},_last:id},{merge:true})); }
   catch(e){ toast(e&&e.code==='permission-denied'?'Someone else just took that slot. Pick another one.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
 }
 /* ---------- tasker check-offs: same idea, one small entry per check-off in tkdone/all ---------- */
@@ -3534,7 +3534,7 @@ async function tkWrite(pid,cid,v){
   // show the change straight away (green / undone), then save; if the save fails, put it back
   const had=Object.prototype.hasOwnProperty.call(FB.tk,k), prev=FB.tk[k]; const entry={v,by:FB.user.uid,at:Date.now()};
   FB.tk={...FB.tk,[k]:entry}; schedule('d:taskers/board'); render();
-  try{ await withRetry(()=>FB.fs.doc('tkdone/all').set({[k]:entry},{merge:true})); }
+  try{ await withRetry(()=>FB.fs.doc('tkdone/all').set({[k]:entry,_last:k},{merge:true})); }
   catch(e){ const back={...FB.tk}; if(had) back[k]=prev; else delete back[k]; FB.tk=back; render(); toast(e&&e.code==='permission-denied'?'Only staff can change someone else’s tasker.':e&&e.code==='unavailable'?'You’re offline. Reconnect and try again.':'That didn’t save. Try again.'); }
 }
 // one time: move sign-ups that were saved inside the old CQ board into the new per-slot record (staff do this automatically)
