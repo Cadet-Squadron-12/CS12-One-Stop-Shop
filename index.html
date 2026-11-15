@@ -296,7 +296,7 @@ button.step{cursor:pointer}
 </header>
 <main class="wrap" id="main"><div class="empty">Loading the squadron's data…</div></main>
 <div id="toast" class="toast" hidden></div>
-<script>window.CS12_VERSION='2026-11-11';</script>
+<script>window.CS12_VERSION='2026-11-15';</script>
 <script>
 "use strict";
 /* ---------- tiny DOM helper ---------- */
@@ -1845,7 +1845,7 @@ VIEWS.me=function(){
   const addTodo=async()=>{ if(!st.todo.trim()) return; try{ await S.db.doc(`${meCol}/todo_${uid()}`).set({text:st.todo.trim(),due:st.due||'',done:false,created:new Date().toISOString()}); st.todo=''; st.due=''; render(); }catch(e){ toast('Your access level can’t save to-dos. Ask for Contributor or Editor access.'); } };
   return h('div',{class:'stack'},
     head(`Hey, ${firstLast(me.name).first}`,`${me.rank} ${me.name}${me.pos?' · '+me.pos:''}`,me.cls?clsTag(me.cls,'Class of ’'+(yearOf(me.cls)||'').slice(2)):null,(typeof identify==='function'&&identify())?h('span',{class:'small muted'},'Wrong person? Ask staff to fix your name on the access list (Admin tab).'):h('button',{class:'btn sm',onclick:()=>S.db.doc(`${meCol}/profile`).delete().catch(()=>{})},'Not you?')),
-    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length))),showCq?h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')):null,showSdo?h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—')):null),
+    h('div',{class:'kpis'},h('div',{class:'kpi'},h('div',{class:'l'},'Next eSSS'),h('div',{class:'v',style:'font-size:20px'},myOut[0]?fmtShort(myOut[0].depart):'—')),h('div',{class:'kpi'},h('div',{class:'l'},'My to-dos'),h('div',{class:'v'},String(todos.filter(x=>!x.done).length+acts.length+ldr.length+(tk?tk.length:0)))),showCq?h('div',{class:'kpi'},h('div',{class:'l'},'Next CQ'),h('div',{class:'v',style:'font-size:20px'},cq[0]?fmtShort(cq[0].date):'—')):null,showSdo?h('div',{class:'kpi'},h('div',{class:'l'},'Next SDO'),h('div',{class:'v',style:'font-size:20px'},sdo[0]?fmtShort(sdo[0]):'—')):null),
     myWeekPanel(name),
     h('div',{class:'grid2'},
       h('div',{class:'panel'},h('h3',null,'My eSSS trips'),h('p',{class:'small muted',style:'margin-top:-4px'},'Your upcoming trips on the eSSS tracker. They add themselves when you download an eSSS or OCONUS package (unless it’s a practice run).'),
