@@ -1764,12 +1764,22 @@ function mySdo(name){ const s=D('sdo/schedule'); if(!s) return []; return Object
 function editDist(a,b){ a=a||''; b=b||''; const m=a.length,n=b.length; if(Math.abs(m-n)>2) return 9; let prev=[...Array(n+1).keys()];
   for(let i=1;i<=m;i++){ const cur=[i]; for(let j=1;j<=n;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1)); prev=cur; } return prev[n]; }
 function tkPersonFor(name){ const tk=D('taskers/board'); if(!tk) return null; const all=[]; tk.groups.forEach(g=>g.people.forEach(x=>all.push(x)));
+  // a cadet can link themselves to their row when the board spells them differently ("Harry" vs "Z. Harrison")
+  const pr=(S.mine||[]).find(d=>d.id==='profile'); const linked=pr&&pr.tkName&&all.find(x=>norm(x.name)===norm(pr.tkName)); if(linked) return linked;
   let p=all.find(x=>norm(x.name)===norm(name))||all.find(x=>sameName(x.name,name)); if(p) return p;
   const me=nameParts(name); const close=all.filter(x=>{ const o=nameParts(x.name); return norm(o.first)===norm(me.first)&&editDist(norm(o.last),norm(me.last))<=2; });
   return close.length===1?close[0]:null; }
 // every tasker assigned to this person, done or not (done = "Yes")
 function myTaskerList(name){ const tk=D('taskers/board'); const p=tkPersonFor(name); if(!tk||!p) return null;
   return tk.columns.map(c=>({c,pid:p.id,v:(tk.status[p.id]||{})[c.id]||''})).filter(x=>x.v).map(x=>({...x,done:/^yes/i.test(x.v)})); }
+// shown when this person can't be found on the tasker board: offer the rows with the same last name ("That's me")
+function tkLinkBox(name,meCol){
+  const tk=D('taskers/board'); if(!tk||!tk.columns.length||myTaskerList(name)!==null) return null;
+  const lasts=new Set([nameParts(stripCls(name)).last,(typeof FB!=='undefined'&&FB.user?emailToName(FB.user.email).split(' ').pop():'')].filter(Boolean).map(norm));
+  const cands=[]; tk.groups.forEach(g=>g.people.forEach(p=>{ if(lasts.has(norm(nameParts(p.name).last))&&!cands.some(x=>norm(x.name)===norm(p.name))) cands.push(p); }));
+  return h('div',{class:'banner warn small',style:'margin-top:8px'},h('b',null,'Your taskers aren’t showing. '),
+    cands.length?['The tasker board may list you under a different name. Is one of these you?',h('div',{class:'row',style:'flex-wrap:wrap;gap:6px;margin-top:6px'},cands.map(p=>h('button',{class:'btn sm',onclick:async()=>{ try{ await S.db.doc(meCol+'/profile').update({tkName:p.name}); toast('Linked. Your taskers will show here.'); }catch(e){ dbErr(e); } }},`That’s me: ${[p.rank,p.name].filter(Boolean).join(' ')}`)))]
+      :'The tasker board lists you under a different name. Ask squadron staff to add the name the board uses to your access-list entry (Admin tab → People & access → Name).'); }
 function myTaskers(name){ const l=myTaskerList(name); return l===null?null:l.filter(x=>!x.done); }
 // Flight commanders / flight chiefs and division chiefs see their people (someone with two leader jobs sees both)
 function leaderScopes(name){
@@ -1860,6 +1870,7 @@ VIEWS.me=function(){
             h('span',{class:'chip '+(x.done?'Approved':'Returned')},x.done?'✓ Completed':'Tasker'),
             h('div',{class:'grow',style:x.done?'text-decoration:line-through;color:var(--muted)':''},x.c.label,!x.done&&tkDue(x.c)?h('div',{class:'small',style:`color:${tkDue(x.c)<t?'var(--coral)':'var(--muted)'}`},(tkDue(x.c)<t?'was due ':'due ')+fmtShort(tkDue(x.c))):h('div',{class:'small muted'},x.done?'Tap to undo':'Tap when done'))))):null,
           todos.map(d=>h('li',null,h('input',{type:'checkbox',checked:d.done,onchange:e=>S.db.doc(`${meCol}/${d.id}`).update({done:e.target.checked}).catch(dbErr)}),h('div',{class:'grow',style:d.done?'text-decoration:line-through;color:var(--muted)':''},d.text,d.due?h('div',{class:'small',style:`color:${!d.done&&d.due<t?'var(--coral)':'var(--muted)'}`},'due '+fmtShort(d.due)):null),confirmBtn('×',()=>S.db.doc(`${meCol}/${d.id}`).delete().catch(dbErr))))),
+        tkLinkBox(name,meCol),
         !acts.length&&!ldr.length&&!(tk&&tk.length)&&!todos.length?h('p',{class:'muted'},'All clear. Staff action items and incomplete taskers with your name show up here too.'):null,
         h('p',{class:'small muted',style:'margin:8px 0 0'},'Your to-dos are private to you.'))),
     bulletLogPanel(meCol),
